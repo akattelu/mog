@@ -17,19 +17,11 @@ pub fn main() !void {
         var lexer = lex.Lexer.init(std.heap.page_allocator, prog);
         defer lexer.deinit();
         var tok = try lexer.nextToken();
-        while (true) {
+        while (tok.type != .eof) {
             var buf: [256]u8 = undefined;
             const str = tok.toString(&buf[0..]);
             try output.print("{s}\n", .{str});
-            tok = lexer.nextToken() catch |err| switch (err) {
-                lex.Lexer.LexError.EOF => {
-                    break;
-                },
-
-                else => |e| {
-                    return e;
-                },
-            };
+            tok = try lexer.nextToken();
         }
         try output.print(">> ", .{});
         read_value = try in.readUntilDelimiterOrEof(&input, '\n');

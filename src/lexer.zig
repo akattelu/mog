@@ -16,7 +16,7 @@ pub const Lexer = struct {
     read_position: u32,
     ch: u8,
 
-    pub const LexError = error{ EOF, Illegal };
+    pub const LexError = error{Illegal};
 
     pub fn init(allocator: std.mem.Allocator, input: []const u8) Lexer {
         const arena = std.heap.ArenaAllocator.init(allocator);
@@ -75,7 +75,12 @@ pub const Lexer = struct {
         var literal: []const u8 = "";
         self.skipWhitespace();
         if (self.read_position > self.input.len) {
-            return LexError.EOF;
+            const tok = try self.alloc.allocator().create(Token);
+            tok.literal = "";
+            tok.type = TokenType.eof;
+            tok.start_pos = self.position;
+            tok.end_pos = self.position;
+            return tok;
         }
 
         switch (self.ch) {
