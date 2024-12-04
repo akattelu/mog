@@ -55,6 +55,10 @@ pub const Token = struct {
     fn init(t: TokenType, literal: []const u8) Token {
         return Token{ .type = t, .literal = literal };
     }
+
+    pub fn to_string(self: *Token) []const u8 {
+        return self.literal;
+    }
 };
 
 fn isDigit(ch: u8) bool {
@@ -70,7 +74,7 @@ pub const Lexer = struct {
     read_position: usize,
     ch: u8,
 
-    fn Init(input: []const u8) Lexer {
+    pub fn init(input: []const u8) Lexer {
         var l = Lexer{ .input = input, .position = 0, .read_position = 0, .ch = 0 };
         l.read_char();
         return l;
@@ -117,10 +121,13 @@ pub const Lexer = struct {
         }
     }
 
-    fn next_token(self: *Lexer) Token {
+    pub fn next_token(self: *Lexer) ?Token {
         var tokType: TokenType = TokenType.illegal;
         var literal: []const u8 = "";
         self.skip_whitespace();
+        if (self.read_position > self.input.len) {
+            return null;
+        }
 
         switch (self.ch) {
             '=' => {
@@ -205,8 +212,7 @@ pub const Lexer = struct {
                     tokType = TokenType.int;
                     return Token.init(tokType, literal);
                 } else {
-                    tokType = TokenType.illegal;
-                    literal = "";
+                    return null;
                 }
             },
         }
@@ -316,10 +322,11 @@ test "next token test" {
         .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
     };
 
-    var lexer = Lexer.Init(input);
+    var lexer = Lexer.init(input);
     for (tests) |t| {
         const tok = lexer.next_token();
-        try std.testing.expectEqualStrings(tok.literal, t.expectedLiteral);
-        try std.testing.expectEqual(tok.type, t.expectedType);
+        try std.testing.expect(tok != null);
+        try std.testing.expectEqualStrings(tok.?.literal, t.expectedLiteral);
+        try std.testing.expectEqual(tok.?.type, t.expectedType);
     }
 }
