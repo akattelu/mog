@@ -28,7 +28,7 @@ pub const TokenType = enum {
     eq,
     neq,
 
-    fn from_ident(lit: []const u8) TokenType {
+    fn fromIdent(lit: []const u8) TokenType {
         if (std.mem.eql(u8, lit, "fn")) {
             return TokenType.function;
         } else if (std.mem.eql(u8, lit, "let")) {
@@ -56,7 +56,7 @@ pub const Token = struct {
         return Token{ .type = t, .literal = literal };
     }
 
-    pub fn to_string(self: *const Token) []const u8 {
+    pub fn toString(self: *const Token) []const u8 {
         return self.literal;
     }
 };
@@ -76,11 +76,11 @@ pub const Lexer = struct {
 
     pub fn init(input: []const u8) Lexer {
         var l = Lexer{ .input = input, .position = 0, .read_position = 0, .ch = 0 };
-        l.read_char();
+        l.readChar();
         return l;
     }
 
-    fn read_char(self: *Lexer) void {
+    fn readChar(self: *Lexer) void {
         if (self.read_position >= self.input.len) {
             self.ch = 0;
         } else {
@@ -90,7 +90,7 @@ pub const Lexer = struct {
         self.read_position += 1;
     }
 
-    fn peek_char(self: *Lexer) u8 {
+    fn peekChar(self: *Lexer) u8 {
         if (self.read_position >= self.input.len) {
             return 0;
         } else {
@@ -98,41 +98,41 @@ pub const Lexer = struct {
         }
     }
 
-    fn read_number(self: *Lexer) []const u8 {
+    fn readNumber(self: *Lexer) []const u8 {
         const start_pos = self.position;
         while (isDigit(self.ch)) {
-            self.read_char();
+            self.readChar();
         }
         const number_as_string = self.input[start_pos..self.position];
         return number_as_string;
     }
 
-    fn read_ident(self: *Lexer) []const u8 {
+    fn readIdent(self: *Lexer) []const u8 {
         const start_pos = self.position;
         while (isLetter(self.ch)) {
-            self.read_char();
+            self.readChar();
         }
         return self.input[start_pos..self.position];
     }
 
-    fn skip_whitespace(self: *Lexer) void {
+    fn skipWhitespace(self: *Lexer) void {
         while (self.ch == '\r' or self.ch == '\n' or self.ch == ' ' or self.ch == '\t') {
-            self.read_char();
+            self.readChar();
         }
     }
 
-    pub fn next_token(self: *Lexer) ?Token {
+    pub fn nextToken(self: *Lexer) ?Token {
         var tokType: TokenType = TokenType.illegal;
         var literal: []const u8 = "";
-        self.skip_whitespace();
+        self.skipWhitespace();
         if (self.read_position > self.input.len) {
             return null;
         }
 
         switch (self.ch) {
             '=' => {
-                if (self.peek_char() == '=') {
-                    self.read_char();
+                if (self.peekChar() == '=') {
+                    self.readChar();
                     tokType = TokenType.eq;
                     literal = "==";
                 } else {
@@ -169,8 +169,8 @@ pub const Lexer = struct {
                 literal = ";";
             },
             '!' => {
-                if (self.peek_char() == '=') {
-                    self.read_char();
+                if (self.peekChar() == '=') {
+                    self.readChar();
                     tokType = TokenType.neq;
                     literal = "!=";
                 } else {
@@ -204,11 +204,11 @@ pub const Lexer = struct {
             },
             else => {
                 if (isLetter(self.ch)) {
-                    literal = self.read_ident();
-                    tokType = TokenType.from_ident(literal);
+                    literal = self.readIdent();
+                    tokType = TokenType.fromIdent(literal);
                     return Token.init(tokType, literal);
                 } else if (isDigit(self.ch)) {
-                    literal = self.read_number();
+                    literal = self.readNumber();
                     tokType = TokenType.int;
                     return Token.init(tokType, literal);
                 } else {
@@ -217,7 +217,7 @@ pub const Lexer = struct {
             },
         }
 
-        self.read_char();
+        self.readChar();
         return Token.init(tokType, literal);
     }
 };
@@ -324,7 +324,7 @@ test "next token test" {
 
     var lexer = Lexer.init(input);
     for (tests) |t| {
-        const tok = lexer.next_token();
+        const tok = lexer.nextToken();
         try std.testing.expect(tok != null);
         try std.testing.expectEqualStrings(tok.?.literal, t.expectedLiteral);
         try std.testing.expectEqual(tok.?.type, t.expectedType);

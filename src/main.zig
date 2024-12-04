@@ -12,10 +12,10 @@ pub fn main() !void {
 
     while (read_value) |prog| {
         var lexer = token.Lexer.init(prog);
-        var tok = lexer.next_token();
+        var tok = lexer.nextToken();
         while (tok) |t| {
-            try output.print("token: {s}\n", .{t.to_string()});
-            tok = lexer.next_token();
+            try output.print("token: {s}\n", .{t.toString()});
+            tok = lexer.nextToken();
         }
         try output.print(">> ", .{});
         read_value = try in.readUntilDelimiterOrEof(&input, '\n');
