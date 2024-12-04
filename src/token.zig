@@ -25,6 +25,8 @@ pub const TokenType = enum {
     false,
     t_else,
     t_return,
+    eq,
+    neq,
 
     fn from_ident(lit: []const u8) TokenType {
         if (std.mem.eql(u8, lit, "fn")) {
@@ -83,6 +85,15 @@ pub const Lexer = struct {
         self.position = self.read_position;
         self.read_position += 1;
     }
+
+    fn peek_char(self: *Lexer) u8 {
+        if (self.read_position >= self.input.len) {
+            return 0;
+        } else {
+            return self.input[self.read_position];
+        }
+    }
+
     fn read_number(self: *Lexer) []const u8 {
         const start_pos = self.position;
         while (isDigit(self.ch)) {
@@ -113,8 +124,14 @@ pub const Lexer = struct {
 
         switch (self.ch) {
             '=' => {
-                tokType = TokenType.assign;
-                literal = "=";
+                if (self.peek_char() == '=') {
+                    self.read_char();
+                    tokType = TokenType.eq;
+                    literal = "==";
+                } else {
+                    tokType = TokenType.assign;
+                    literal = "=";
+                }
             },
             '+' => {
                 tokType = TokenType.plus;
@@ -145,8 +162,14 @@ pub const Lexer = struct {
                 literal = ";";
             },
             '!' => {
-                tokType = TokenType.bang;
-                literal = "!";
+                if (self.peek_char() == '=') {
+                    self.read_char();
+                    tokType = TokenType.neq;
+                    literal = "!=";
+                } else {
+                    tokType = TokenType.bang;
+                    literal = "!";
+                }
             },
             '-' => {
                 tokType = TokenType.minus;
@@ -214,6 +237,8 @@ test "next token test" {
         \\} else {
         \\return false;
         \\}
+        \\5==10;
+        \\5!=10;
     ;
     const tests = [_]struct { expectedType: TokenType, expectedLiteral: []const u8 }{
         .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
@@ -281,6 +306,14 @@ test "next token test" {
         .{ .expectedType = TokenType.false, .expectedLiteral = "false" },
         .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
         .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
+        .{ .expectedType = TokenType.eq, .expectedLiteral = "==" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
+        .{ .expectedType = TokenType.neq, .expectedLiteral = "!=" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
     };
 
     var lexer = Lexer.Init(input);
