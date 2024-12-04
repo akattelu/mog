@@ -1,8 +1,8 @@
 const token = @import("token.zig");
 
-const NodeType = enum { Statement, Expression, Program };
+pub const NodeType = enum { Statement, Expression, Program };
 
-const Node = union(NodeType) {
+pub const Node = union(NodeType) {
     Statement: Statement,
     Expression: Expression,
     Program: Program,
@@ -16,8 +16,8 @@ const Node = union(NodeType) {
     }
 };
 
-const StatementTypes = enum { Let };
-const Statement = union(StatementTypes) {
+pub const StatementTypes = enum { Let };
+pub const Statement = union(StatementTypes) {
     Let: LetStatement,
     pub fn tokenLiteral(self: *const Statement) []const u8 {
         switch (self.*) {
@@ -26,7 +26,7 @@ const Statement = union(StatementTypes) {
     }
 };
 
-const LetStatement = struct {
+pub const LetStatement = struct {
     token: token.Token,
     name: *Identifier,
     expr: *Expression,
@@ -35,10 +35,10 @@ const LetStatement = struct {
     }
 };
 
-const ExpressionTypes = enum {
+pub const ExpressionTypes = enum {
     Identifier,
 };
-const Expression = union(ExpressionTypes) {
+pub const Expression = union(ExpressionTypes) {
     pub fn tokenLiteral(self: *const Statement) []const u8 {
         switch (self.*) {
             .Identifier => |n| return n.tokenLiteral(),
@@ -46,7 +46,7 @@ const Expression = union(ExpressionTypes) {
     }
 };
 
-const Identifier = struct {
+pub const Identifier = struct {
     token: token.Token,
     value: []u8,
     pub fn tokenLiteral(self: *const Identifier) []const u8 {
@@ -54,7 +54,7 @@ const Identifier = struct {
     }
 };
 
-const Program = struct {
+pub const Program = struct {
     statements: []Statement,
 
     pub fn tokenLiteral(self: *const Program) []const u8 {
