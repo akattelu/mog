@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const TokenType = enum { illegal, eof, ident, int, assign, plus, comma, semicolon, lparen, lbrace, rparen, rbrace, function, let };
+pub const TokenType = enum { illegal, eof, ident, int, assign, plus, comma, semicolon, lparen, lbrace, rparen, rbrace, function, let, bang, minus, slash, asterisk, lt, gt };
 pub const Token = struct {
     type: TokenType,
     literal: []const u8,
@@ -108,6 +108,30 @@ pub const Lexer = struct {
                 tokType = TokenType.semicolon;
                 literal = ";";
             },
+            '!' => {
+                tokType = TokenType.bang;
+                literal = "!";
+            },
+            '-' => {
+                tokType = TokenType.minus;
+                literal = "-";
+            },
+            '/' => {
+                tokType = TokenType.slash;
+                literal = "/";
+            },
+            '*' => {
+                tokType = TokenType.asterisk;
+                literal = "*";
+            },
+            '<' => {
+                tokType = TokenType.lt;
+                literal = "<";
+            },
+            '>' => {
+                tokType = TokenType.gt;
+                literal = ">";
+            },
             0 => {
                 tokType = TokenType.eof;
                 literal = "";
@@ -147,6 +171,8 @@ test "next token test" {
         \\x + y;
         \\};
         \\let result = add(five, ten);
+        \\!-/*5;
+        \\5 < 10 > 5;
     ;
     const tests = [_]struct { expectedType: TokenType, expectedLiteral: []const u8 }{
         .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
@@ -184,6 +210,18 @@ test "next token test" {
         .{ .expectedType = TokenType.comma, .expectedLiteral = "," },
         .{ .expectedType = TokenType.ident, .expectedLiteral = "ten" },
         .{ .expectedType = TokenType.rparen, .expectedLiteral = ")" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.bang, .expectedLiteral = "!" },
+        .{ .expectedType = TokenType.minus, .expectedLiteral = "-" },
+        .{ .expectedType = TokenType.slash, .expectedLiteral = "/" },
+        .{ .expectedType = TokenType.asterisk, .expectedLiteral = "*" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
+        .{ .expectedType = TokenType.lt, .expectedLiteral = "<" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
+        .{ .expectedType = TokenType.gt, .expectedLiteral = ">" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
         .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
     };
 
