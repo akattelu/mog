@@ -46,13 +46,17 @@ pub const TokenType = enum {
 pub const Token = struct {
     type: TokenType,
     literal: []const u8,
+    start_pos: u32,
+    end_pos: u32,
 
-    fn init(t: TokenType, literal: []const u8) Token {
-        return Token{ .type = t, .literal = literal };
+    fn init(t: TokenType, literal: []const u8, start_pos: u32, end_pos: u32) Token {
+        return Token{ .type = t, .literal = literal, .start_pos = start_pos, .end_pos = end_pos };
     }
 
-    pub fn toString(self: *const Token) []const u8 {
-        return self.literal;
+    pub fn toString(self: *const Token, buf: *const []u8) []const u8 {
+        return std.fmt.bufPrint(buf.*, "{s}@{d}..{d}", .{ self.literal, self.start_pos, self.end_pos }) catch {
+            return self.literal;
+        };
     }
 };
 
@@ -65,8 +69,8 @@ fn isLetter(ch: u8) bool {
 
 pub const Lexer = struct {
     input: []const u8,
-    position: usize,
-    read_position: usize,
+    position: u32,
+    read_position: u32,
     ch: u8,
 
     pub fn init(input: []const u8) Lexer {
@@ -201,11 +205,11 @@ pub const Lexer = struct {
                 if (isLetter(self.ch)) {
                     literal = self.readIdent();
                     tokType = TokenType.fromIdent(literal);
-                    return Token.init(tokType, literal);
+                    return Token.init(tokType, literal, @intCast(self.position - literal.len), self.position - 1);
                 } else if (isDigit(self.ch)) {
                     literal = self.readNumber();
                     tokType = TokenType.int;
-                    return Token.init(tokType, literal);
+                    return Token.init(tokType, literal, @intCast(self.position - literal.len), self.position - 1);
                 } else {
                     return null;
                 }
@@ -213,14 +217,16 @@ pub const Lexer = struct {
         }
 
         self.readChar();
-        return Token.init(tokType, literal);
+        return Token.init(tokType, literal, @intCast(self.position - literal.len), self.position - 1);
     }
 };
 
 test "token test" {
-    const tok = Token.init(TokenType.plus, "+");
+    const tok = Token.init(TokenType.plus, "+", 0, 1);
     try std.testing.expectEqualStrings(tok.literal, "+");
     try std.testing.expectEqual(tok.type, TokenType.plus);
+    try std.testing.expectEqual(tok.start_pos, 0);
+    try std.testing.expectEqual(tok.end_pos, 1);
 }
 
 test "next token test" {
@@ -241,80 +247,85 @@ test "next token test" {
         \\5==10;
         \\5!=10;
     ;
-    const tests = [_]struct { expectedType: TokenType, expectedLiteral: []const u8 }{
-        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "five" },
-        .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "ten" },
-        .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "add" },
-        .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
-        .{ .expectedType = TokenType.function, .expectedLiteral = "fn" },
-        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "x" },
-        .{ .expectedType = TokenType.comma, .expectedLiteral = "," },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "y" },
-        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")" },
-        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "x" },
-        .{ .expectedType = TokenType.plus, .expectedLiteral = "+" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "y" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "result" },
-        .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "add" },
-        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(" },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "five" },
-        .{ .expectedType = TokenType.comma, .expectedLiteral = "," },
-        .{ .expectedType = TokenType.ident, .expectedLiteral = "ten" },
-        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.bang, .expectedLiteral = "!" },
-        .{ .expectedType = TokenType.minus, .expectedLiteral = "-" },
-        .{ .expectedType = TokenType.slash, .expectedLiteral = "/" },
-        .{ .expectedType = TokenType.asterisk, .expectedLiteral = "*" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
-        .{ .expectedType = TokenType.lt, .expectedLiteral = "<" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
-        .{ .expectedType = TokenType.gt, .expectedLiteral = ">" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.t_if, .expectedLiteral = "if" },
-        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
-        .{ .expectedType = TokenType.lt, .expectedLiteral = "<" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
-        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")" },
-        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{" },
-        .{ .expectedType = TokenType.t_return, .expectedLiteral = "return" },
-        .{ .expectedType = TokenType.true, .expectedLiteral = "true" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}" },
-        .{ .expectedType = TokenType.t_else, .expectedLiteral = "else" },
-        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{" },
-        .{ .expectedType = TokenType.t_return, .expectedLiteral = "return" },
-        .{ .expectedType = TokenType.false, .expectedLiteral = "false" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
-        .{ .expectedType = TokenType.eq, .expectedLiteral = "==" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
-        .{ .expectedType = TokenType.neq, .expectedLiteral = "!=" },
-        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
-        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+    const tests = [_]struct {
+        expectedType: TokenType,
+        expectedLiteral: []const u8,
+        expectedStart: u32,
+        expectedEnd: u32,
+    }{
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let", .expectedStart = 0, .expectedEnd = 2 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "five", .expectedStart = 4, .expectedEnd = 7 },
+        .{ .expectedType = TokenType.assign, .expectedLiteral = "=", .expectedStart = 9, .expectedEnd = 9 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5", .expectedStart = 11, .expectedEnd = 11 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 12, .expectedEnd = 12 },
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let", .expectedStart = 14, .expectedEnd = 16 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "ten", .expectedStart = 18, .expectedEnd = 20 },
+        .{ .expectedType = TokenType.assign, .expectedLiteral = "=", .expectedStart = 22, .expectedEnd = 22 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10", .expectedStart = 24, .expectedEnd = 25 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 26, .expectedEnd = 26 },
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let", .expectedStart = 28, .expectedEnd = 30 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "add", .expectedStart = 32, .expectedEnd = 34 },
+        .{ .expectedType = TokenType.assign, .expectedLiteral = "=", .expectedStart = 36, .expectedEnd = 36 },
+        .{ .expectedType = TokenType.function, .expectedLiteral = "fn", .expectedStart = 38, .expectedEnd = 39 },
+        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(", .expectedStart = 40, .expectedEnd = 40 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "x", .expectedStart = 41, .expectedEnd = 41 },
+        .{ .expectedType = TokenType.comma, .expectedLiteral = ",", .expectedStart = 42, .expectedEnd = 42 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "y", .expectedStart = 44, .expectedEnd = 44 },
+        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")", .expectedStart = 45, .expectedEnd = 45 },
+        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{", .expectedStart = 47, .expectedEnd = 47 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "x", .expectedStart = 49, .expectedEnd = 49 },
+        .{ .expectedType = TokenType.plus, .expectedLiteral = "+", .expectedStart = 51, .expectedEnd = 51 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "y", .expectedStart = 53, .expectedEnd = 53 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 54, .expectedEnd = 54 },
+        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}", .expectedStart = 56, .expectedEnd = 56 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 57, .expectedEnd = 57 },
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let", .expectedStart = 59, .expectedEnd = 61 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "result", .expectedStart = 63, .expectedEnd = 68 },
+        .{ .expectedType = TokenType.assign, .expectedLiteral = "=", .expectedStart = 70, .expectedEnd = 70 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "add", .expectedStart = 72, .expectedEnd = 74 },
+        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(", .expectedStart = 75, .expectedEnd = 75 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "five", .expectedStart = 76, .expectedEnd = 79 },
+        .{ .expectedType = TokenType.comma, .expectedLiteral = ",", .expectedStart = 80, .expectedEnd = 80 },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "ten", .expectedStart = 82, .expectedEnd = 84 },
+        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")", .expectedStart = 85, .expectedEnd = 85 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 86, .expectedEnd = 86 },
+        .{ .expectedType = TokenType.bang, .expectedLiteral = "!", .expectedStart = 88, .expectedEnd = 88 },
+        .{ .expectedType = TokenType.minus, .expectedLiteral = "-", .expectedStart = 89, .expectedEnd = 89 },
+        .{ .expectedType = TokenType.slash, .expectedLiteral = "/", .expectedStart = 90, .expectedEnd = 90 },
+        .{ .expectedType = TokenType.asterisk, .expectedLiteral = "*", .expectedStart = 91, .expectedEnd = 91 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5", .expectedStart = 92, .expectedEnd = 92 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 93, .expectedEnd = 93 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5", .expectedStart = 95, .expectedEnd = 95 },
+        .{ .expectedType = TokenType.lt, .expectedLiteral = "<", .expectedStart = 97, .expectedEnd = 97 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10", .expectedStart = 99, .expectedEnd = 100 },
+        .{ .expectedType = TokenType.gt, .expectedLiteral = ">", .expectedStart = 102, .expectedEnd = 102 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5", .expectedStart = 104, .expectedEnd = 104 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 105, .expectedEnd = 105 },
+        .{ .expectedType = TokenType.t_if, .expectedLiteral = "if", .expectedStart = 107, .expectedEnd = 108 },
+        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(", .expectedStart = 110, .expectedEnd = 110 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5", .expectedStart = 111, .expectedEnd = 111 },
+        .{ .expectedType = TokenType.lt, .expectedLiteral = "<", .expectedStart = 113, .expectedEnd = 113 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10", .expectedStart = 115, .expectedEnd = 116 },
+        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")", .expectedStart = 117, .expectedEnd = 117 },
+        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{", .expectedStart = 119, .expectedEnd = 119 },
+        .{ .expectedType = TokenType.t_return, .expectedLiteral = "return", .expectedStart = 121, .expectedEnd = 126 },
+        .{ .expectedType = TokenType.true, .expectedLiteral = "true", .expectedStart = 128, .expectedEnd = 131 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 132, .expectedEnd = 132 },
+        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}", .expectedStart = 134, .expectedEnd = 134 },
+        .{ .expectedType = TokenType.t_else, .expectedLiteral = "else", .expectedStart = 136, .expectedEnd = 139 },
+        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{", .expectedStart = 141, .expectedEnd = 141 },
+        .{ .expectedType = TokenType.t_return, .expectedLiteral = "return", .expectedStart = 143, .expectedEnd = 148 },
+        .{ .expectedType = TokenType.false, .expectedLiteral = "false", .expectedStart = 150, .expectedEnd = 154 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 155, .expectedEnd = 155 },
+        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}", .expectedStart = 157, .expectedEnd = 157 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5", .expectedStart = 159, .expectedEnd = 159 },
+        .{ .expectedType = TokenType.eq, .expectedLiteral = "==", .expectedStart = 160, .expectedEnd = 161 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10", .expectedStart = 162, .expectedEnd = 163 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 164, .expectedEnd = 164 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5", .expectedStart = 166, .expectedEnd = 166 },
+        .{ .expectedType = TokenType.neq, .expectedLiteral = "!=", .expectedStart = 167, .expectedEnd = 168 },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10", .expectedStart = 169, .expectedEnd = 170 },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 171, .expectedEnd = 171 },
     };
 
     var lexer = Lexer.init(input);
@@ -323,5 +334,7 @@ test "next token test" {
         try std.testing.expect(tok != null);
         try std.testing.expectEqualStrings(tok.?.literal, t.expectedLiteral);
         try std.testing.expectEqual(tok.?.type, t.expectedType);
+        try std.testing.expectEqual(tok.?.start_pos, t.expectedStart);
+        try std.testing.expectEqual(tok.?.end_pos, t.expectedEnd);
     }
 }

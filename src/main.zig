@@ -14,7 +14,9 @@ pub fn main() !void {
         var lexer = token.Lexer.init(prog);
         var tok = lexer.nextToken();
         while (tok) |t| {
-            try output.print("token: {s}\n", .{t.toString()});
+            var buf: [256]u8 = undefined;
+            const str = t.toString(&buf[0..]);
+            try output.print("token: {s}\n", .{str});
             tok = lexer.nextToken();
         }
         try output.print(">> ", .{});
