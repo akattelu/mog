@@ -10,11 +10,11 @@ pub fn main() !void {
     try output.print(">> ", .{});
     var read_value = try in.readUntilDelimiterOrEof(&input, '\n');
 
-    while (read_value != null) {
-        var lexer = token.Lexer.init(read_value.?);
+    while (read_value) |prog| {
+        var lexer = token.Lexer.init(prog);
         var tok = lexer.next_token();
-        while (tok != null) {
-            try output.print("token: {s}\n", .{tok.?.to_string()});
+        while (tok) |t| {
+            try output.print("token: {s}\n", .{t.to_string()});
             tok = lexer.next_token();
         }
         try output.print(">> ", .{});

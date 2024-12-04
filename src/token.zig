@@ -56,7 +56,7 @@ pub const Token = struct {
         return Token{ .type = t, .literal = literal };
     }
 
-    pub fn to_string(self: *Token) []const u8 {
+    pub fn to_string(self: *const Token) []const u8 {
         return self.literal;
     }
 };
