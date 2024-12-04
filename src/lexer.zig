@@ -18,9 +18,14 @@ pub const Lexer = struct {
 
     pub const LexError = error{Illegal};
 
-    pub fn init(allocator: std.mem.Allocator, input: []const u8) Lexer {
-        const arena = std.heap.ArenaAllocator.init(allocator);
-        var l = Lexer{ .input = input, .position = 0, .read_position = 0, .ch = 0, .alloc = arena };
+    pub fn init(allocator: std.mem.Allocator, input: []const u8) !*Lexer {
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        var l = try arena.allocator().create(Lexer);
+        l.input = input;
+        l.position = 0;
+        l.read_position = 0;
+        l.ch = 0;
+        l.alloc = arena;
         l.readChar();
         return l;
     }
@@ -286,7 +291,7 @@ test "next token test" {
     };
 
     const allocator = std.testing.allocator;
-    var lexer = Lexer.init(allocator, input);
+    var lexer = try Lexer.init(allocator, input);
     defer lexer.deinit();
     for (tests) |t| {
         const tok = (try lexer.nextToken()).*;

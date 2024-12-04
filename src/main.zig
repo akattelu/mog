@@ -14,7 +14,7 @@ pub fn main() !void {
     var read_value = try in.readUntilDelimiterOrEof(&input, '\n');
 
     while (read_value) |prog| {
-        var lexer = lex.Lexer.init(std.heap.page_allocator, prog);
+        var lexer = try lex.Lexer.init(std.heap.page_allocator, prog);
         defer lexer.deinit();
         var tok = try lexer.nextToken();
         while (tok.type != .eof) {
