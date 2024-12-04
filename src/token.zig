@@ -7,7 +7,24 @@ pub const Token = struct {
     fn init(t: TokenType, literal: []const u8) Token {
         return Token{ .type = t, .literal = literal };
     }
+
+    fn type_from_ident(lit: []const u8) TokenType {
+        if (std.mem.eql(u8, lit, "fn")) {
+            return TokenType.function;
+        } else if (std.mem.eql(u8, lit, "let")) {
+            return TokenType.let;
+        } else {
+            return TokenType.ident;
+        }
+    }
 };
+
+fn isDigit(ch: u8) bool {
+    return std.ascii.isDigit(ch);
+}
+fn isLetter(ch: u8) bool {
+    return std.ascii.isAlphabetic(ch);
+}
 
 pub const Lexer = struct {
     input: []const u8,
@@ -30,10 +47,33 @@ pub const Lexer = struct {
         self.position = self.read_position;
         self.read_position += 1;
     }
+    fn read_number(self: *Lexer) []const u8 {
+        const start_pos = self.position;
+        while (isDigit(self.ch)) {
+            self.read_char();
+        }
+        const number_as_string = self.input[start_pos..self.position];
+        return number_as_string;
+    }
+
+    fn read_ident(self: *Lexer) []const u8 {
+        const start_pos = self.position;
+        while (isLetter(self.ch)) {
+            self.read_char();
+        }
+        return self.input[start_pos..self.position];
+    }
+
+    fn skip_whitespace(self: *Lexer) void {
+        while (self.ch == '\r' or self.ch == '\n' or self.ch == ' ' or self.ch == '\t') {
+            self.read_char();
+        }
+    }
 
     fn next_token(self: *Lexer) Token {
         var tokType: TokenType = TokenType.illegal;
         var literal: []const u8 = "";
+        self.skip_whitespace();
 
         switch (self.ch) {
             '=' => {
@@ -73,8 +113,18 @@ pub const Lexer = struct {
                 literal = "";
             },
             else => {
-                tokType = TokenType.illegal;
-                literal = "";
+                if (isLetter(self.ch)) {
+                    literal = self.read_ident();
+                    tokType = Token.type_from_ident(literal);
+                    return Token.init(tokType, literal);
+                } else if (isDigit(self.ch)) {
+                    literal = self.read_number();
+                    tokType = TokenType.int;
+                    return Token.init(tokType, literal);
+                } else {
+                    tokType = TokenType.illegal;
+                    literal = "";
+                }
             },
         }
 
