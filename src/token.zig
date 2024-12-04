@@ -1,14 +1,32 @@
 const std = @import("std");
-pub const TokenType = enum { illegal, eof, ident, int, assign, plus, comma, semicolon, lparen, lbrace, rparen, rbrace, function, let, bang, minus, slash, asterisk, lt, gt, t_if, true, false, t_else, t_return };
-pub const Token = struct {
-    type: TokenType,
-    literal: []const u8,
+pub const TokenType = enum {
+    illegal,
+    eof,
+    ident,
+    int,
+    assign,
+    plus,
+    comma,
+    semicolon,
+    lparen,
+    lbrace,
+    rparen,
+    rbrace,
+    function,
+    let,
+    bang,
+    minus,
+    slash,
+    asterisk,
+    lt,
+    gt,
+    t_if,
+    true,
+    false,
+    t_else,
+    t_return,
 
-    fn init(t: TokenType, literal: []const u8) Token {
-        return Token{ .type = t, .literal = literal };
-    }
-
-    fn type_from_ident(lit: []const u8) TokenType {
+    fn from_ident(lit: []const u8) TokenType {
         if (std.mem.eql(u8, lit, "fn")) {
             return TokenType.function;
         } else if (std.mem.eql(u8, lit, "let")) {
@@ -26,6 +44,14 @@ pub const Token = struct {
         } else {
             return TokenType.ident;
         }
+    }
+};
+pub const Token = struct {
+    type: TokenType,
+    literal: []const u8,
+
+    fn init(t: TokenType, literal: []const u8) Token {
+        return Token{ .type = t, .literal = literal };
     }
 };
 
@@ -149,7 +175,7 @@ pub const Lexer = struct {
             else => {
                 if (isLetter(self.ch)) {
                     literal = self.read_ident();
-                    tokType = Token.type_from_ident(literal);
+                    tokType = TokenType.from_ident(literal);
                     return Token.init(tokType, literal);
                 } else if (isDigit(self.ch)) {
                     literal = self.read_number();
