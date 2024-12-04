@@ -20,10 +20,10 @@ pub fn main() !void {
         while (true) {
             var buf: [256]u8 = undefined;
             const str = tok.toString(&buf[0..]);
-            try output.print("token: {s}\n", .{str});
+            try output.print("{s}\n", .{str});
             tok = lexer.nextToken() catch |err| switch (err) {
                 lex.Lexer.LexError.EOF => {
-                    return;
+                    break;
                 },
 
                 else => |e| {
