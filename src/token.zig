@@ -1,5 +1,5 @@
 const std = @import("std");
-pub const TokenType = enum { illegal, eof, ident, int, assign, plus, comma, semicolon, lparen, lbrace, rparen, rbrace, function, let, bang, minus, slash, asterisk, lt, gt };
+pub const TokenType = enum { illegal, eof, ident, int, assign, plus, comma, semicolon, lparen, lbrace, rparen, rbrace, function, let, bang, minus, slash, asterisk, lt, gt, t_if, true, false, t_else, t_return };
 pub const Token = struct {
     type: TokenType,
     literal: []const u8,
@@ -13,6 +13,16 @@ pub const Token = struct {
             return TokenType.function;
         } else if (std.mem.eql(u8, lit, "let")) {
             return TokenType.let;
+        } else if (std.mem.eql(u8, lit, "if")) {
+            return TokenType.t_if;
+        } else if (std.mem.eql(u8, lit, "else")) {
+            return TokenType.t_else;
+        } else if (std.mem.eql(u8, lit, "true")) {
+            return TokenType.true;
+        } else if (std.mem.eql(u8, lit, "false")) {
+            return TokenType.false;
+        } else if (std.mem.eql(u8, lit, "return")) {
+            return TokenType.t_return;
         } else {
             return TokenType.ident;
         }
@@ -173,6 +183,11 @@ test "next token test" {
         \\let result = add(five, ten);
         \\!-/*5;
         \\5 < 10 > 5;
+        \\if (5 < 10) {
+        \\return true;
+        \\} else {
+        \\return false;
+        \\}
     ;
     const tests = [_]struct { expectedType: TokenType, expectedLiteral: []const u8 }{
         .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
@@ -223,6 +238,23 @@ test "next token test" {
         .{ .expectedType = TokenType.gt, .expectedLiteral = ">" },
         .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
         .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.t_if, .expectedLiteral = "if" },
+        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
+        .{ .expectedType = TokenType.lt, .expectedLiteral = "<" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
+        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")" },
+        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{" },
+        .{ .expectedType = TokenType.t_return, .expectedLiteral = "return" },
+        .{ .expectedType = TokenType.true, .expectedLiteral = "true" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}" },
+        .{ .expectedType = TokenType.t_else, .expectedLiteral = "else" },
+        .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{" },
+        .{ .expectedType = TokenType.t_return, .expectedLiteral = "return" },
+        .{ .expectedType = TokenType.false, .expectedLiteral = "false" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}" },
     };
 
     var lexer = Lexer.Init(input);
