@@ -90,15 +90,50 @@ test "token test" {
 }
 
 test "next token test" {
-    const input = "=+(){},;";
+    const input =
+        \\let five = 5;
+        \\let ten = 10;
+        \\let add = fn(x, y) {
+        \\x + y;
+        \\};
+        \\let result = add(five, ten);
+    ;
     const tests = [_]struct { expectedType: TokenType, expectedLiteral: []const u8 }{
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "five" },
         .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
-        .{ .expectedType = TokenType.plus, .expectedLiteral = "+" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "5" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "ten" },
+        .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "10" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "add" },
+        .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
+        .{ .expectedType = TokenType.function, .expectedLiteral = "fn" },
         .{ .expectedType = TokenType.lparen, .expectedLiteral = "(" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "x" },
+        .{ .expectedType = TokenType.comma, .expectedLiteral = "," },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "y" },
         .{ .expectedType = TokenType.rparen, .expectedLiteral = ")" },
         .{ .expectedType = TokenType.lbrace, .expectedLiteral = "{" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "x" },
+        .{ .expectedType = TokenType.plus, .expectedLiteral = "+" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "y" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
         .{ .expectedType = TokenType.rbrace, .expectedLiteral = "}" },
+        .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
+        .{ .expectedType = TokenType.let, .expectedLiteral = "let" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "result" },
+        .{ .expectedType = TokenType.assign, .expectedLiteral = "=" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "add" },
+        .{ .expectedType = TokenType.lparen, .expectedLiteral = "(" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "five" },
         .{ .expectedType = TokenType.comma, .expectedLiteral = "," },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "ten" },
+        .{ .expectedType = TokenType.rparen, .expectedLiteral = ")" },
         .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";" },
     };
 
