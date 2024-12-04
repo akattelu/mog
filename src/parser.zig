@@ -30,6 +30,21 @@ pub const Parser = struct {
         self.peek_token = try self.lexer.nextToken();
     }
 
+    fn currentTokenIs(self: *Parser, t: token.TokenType) bool {
+        return self.current_token.type == t;
+    }
+    fn peekTokenIs(self: *Parser, t: token.TokenType) bool {
+        return self.peek_token.type == t;
+    }
+
+    fn expectAndPeek(self: *Parser, t: token.TokenType) bool {
+        if (self.peekTokenIs(t)) {
+            self.nextToken() catch return false;
+            return true;
+        }
+        return false;
+    }
+
     pub fn parseProgram(self: *Parser) !*ast.Program {
         var program = try self.alloc.allocator().create(ast.Program);
         var statements = std.ArrayList(*ast.Statement).init(self.alloc.allocator());
@@ -76,8 +91,13 @@ pub const Parser = struct {
     fn parseLetStatement(self: *Parser) !*ast.LetStatement {
         const ls = try self.alloc.allocator().create(ast.LetStatement);
         ls.token = self.current_token.*;
-        try self.nextToken();
+        if (!self.expectAndPeek(.ident)) {
+            return ParserError.fail;
+        }
         ls.name = try self.parseIdentifier();
+        if (!self.expectAndPeek(.assign)) {
+            return ParserError.fail;
+        }
         ls.expr = null;
 
         // NOTE: skip until semicolon for now
