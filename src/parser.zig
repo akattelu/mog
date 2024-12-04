@@ -44,20 +44,34 @@ pub const Parser = struct {
     }
 
     fn parseStatement(self: *Parser) !*ast.Statement {
+        const stmt = try self.alloc.allocator().create(ast.Statement);
         switch (self.current_token.type) {
             .let => {
-                var stmt = try self.alloc.allocator().create(ast.Statement);
-                const lst = try self.parseLetStatement();
-                stmt.Let = lst;
-                return stmt;
+                stmt.* = .{ .Let = try self.parseLetStatement() };
+            },
+            .t_return => {
+                stmt.* = .{ .Return = try self.parseReturnStatement() };
             },
             else => {
                 unreachable;
             },
         }
+        return stmt;
     }
 
     const ParserError = error{fail};
+
+    fn parseReturnStatement(self: *Parser) !*ast.ReturnStatement {
+        const rs = try self.alloc.allocator().create(ast.ReturnStatement);
+        rs.token = self.current_token.*;
+        rs.expr = null;
+        try self.nextToken();
+        // NOTE: skip until semicolon for now
+        while (self.current_token.type != .semicolon) {
+            try self.nextToken();
+        }
+        return rs;
+    }
 
     fn parseLetStatement(self: *Parser) !*ast.LetStatement {
         const ls = try self.alloc.allocator().create(ast.LetStatement);
@@ -113,6 +127,25 @@ test "let statements" {
     try testLetStatement(program.statements[2], "foo");
 }
 
+test "return statements" {
+    const input =
+        \\return x; 
+        \\return 3;
+        \\return;
+    ;
+
+    const allocator = std.testing.allocator;
+    const lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = (try parser.parseProgram()).*;
+    try std.testing.expectEqual(3, program.statements.len);
+    try testReturnStatement(program.statements[0], "x");
+    try testReturnStatement(program.statements[1], "y");
+    try testReturnStatement(program.statements[2], "foo");
+}
+
 fn testLetStatement(s: *ast.Statement, name: []const u8) !void {
     try std.testing.expectEqualStrings("let", s.tokenLiteral());
     try std.testing.expectEqualStrings("let", s.tokenLiteral());
@@ -122,5 +155,18 @@ fn testLetStatement(s: *ast.Statement, name: []const u8) !void {
             try std.testing.expectEqualStrings(name, ls.name.value);
             try std.testing.expectEqualStrings(name, ls.name.tokenLiteral());
         },
+        else => unreachable,
+    }
+}
+
+fn testReturnStatement(s: *ast.Statement, _: []const u8) !void {
+    try std.testing.expectEqualStrings("return", s.tokenLiteral());
+    try std.testing.expectEqualStrings("return", s.tokenLiteral());
+
+    switch (s.*) {
+        .Return => {
+            // TODO: test the expression
+        },
+        else => unreachable,
     }
 }

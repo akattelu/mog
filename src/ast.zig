@@ -12,24 +12,37 @@ pub const Node = union(NodeType) {
         switch (self.*) {
             .Statement => |n| return n.tokenLiteral(),
             .Expression => |n| return n.tokenLiteral(),
-            .Expression => |n| return n.tokenLiteral(),
+            .Program => |n| return n.tokenLiteral(),
         }
     }
 };
 
-pub const StatementTypes = enum { Let };
+pub const StatementTypes = enum { Let, Return };
 pub const Statement = union(StatementTypes) {
     Let: *LetStatement,
+    Return: *ReturnStatement,
     pub fn tokenLiteral(self: *const Statement) []const u8 {
         switch (self.*) {
             .Let => |n| return n.tokenLiteral(),
+            .Return => |n| return n.tokenLiteral(),
         }
+    }
+};
+
+pub const ReturnStatement = struct {
+    token: token.Token,
+    // TODO: make this required
+    expr: ?*Expression,
+
+    pub fn tokenLiteral(self: *const ReturnStatement) []const u8 {
+        return self.token.literal;
     }
 };
 
 pub const LetStatement = struct {
     token: token.Token,
     name: *Identifier,
+    // TODO: make this required
     expr: ?*Expression,
     pub fn tokenLiteral(self: *const LetStatement) []const u8 {
         return self.token.literal;
