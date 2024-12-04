@@ -29,25 +29,20 @@ pub const TokenType = enum {
     neq,
 
     fn fromIdent(lit: []const u8) TokenType {
-        if (std.mem.eql(u8, lit, "fn")) {
-            return TokenType.function;
-        } else if (std.mem.eql(u8, lit, "let")) {
-            return TokenType.let;
-        } else if (std.mem.eql(u8, lit, "if")) {
-            return TokenType.t_if;
-        } else if (std.mem.eql(u8, lit, "else")) {
-            return TokenType.t_else;
-        } else if (std.mem.eql(u8, lit, "true")) {
-            return TokenType.true;
-        } else if (std.mem.eql(u8, lit, "false")) {
-            return TokenType.false;
-        } else if (std.mem.eql(u8, lit, "return")) {
-            return TokenType.t_return;
-        } else {
-            return TokenType.ident;
-        }
+        const keywords = std.StaticStringMap(TokenType);
+        const map = keywords.initComptime(.{
+            .{ "fn", .function },
+            .{ "let", .let },
+            .{ "if", .t_if },
+            .{ "else", .t_else },
+            .{ "true", .true },
+            .{ "false", .false },
+            .{ "return", .t_return },
+        });
+        return map.get(lit) orelse .ident;
     }
 };
+
 pub const Token = struct {
     type: TokenType,
     literal: []const u8,
