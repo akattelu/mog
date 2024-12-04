@@ -1,6 +1,8 @@
 const std = @import("std");
 pub const token = @import("token.zig");
+pub const lex = @import("lexer.zig");
 pub const ast = @import("ast.zig");
+pub const parser = @import("parser.zig");
 
 pub fn main() !void {
     const in = std.io.getStdIn().reader();
@@ -12,7 +14,7 @@ pub fn main() !void {
     var read_value = try in.readUntilDelimiterOrEof(&input, '\n');
 
     while (read_value) |prog| {
-        var lexer = token.Lexer.init(std.heap.page_allocator, prog);
+        var lexer = lex.Lexer.init(std.heap.page_allocator, prog);
         defer lexer.deinit();
         var tok = try lexer.nextToken();
         while (true) {
@@ -20,7 +22,7 @@ pub fn main() !void {
             const str = tok.toString(&buf[0..]);
             try output.print("token: {s}\n", .{str});
             tok = lexer.nextToken() catch |err| switch (err) {
-                token.Lexer.LexError.EOF => {
+                lex.Lexer.LexError.EOF => {
                     return;
                 },
 

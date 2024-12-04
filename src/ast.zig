@@ -1,4 +1,3 @@
-const std = @import("std");
 const token = @import("token.zig");
 
 const NodeType = enum { Statement, Expression, Program };
@@ -66,39 +65,3 @@ const Program = struct {
         }
     }
 };
-
-pub const Parser = struct {
-    lexer: *token.Lexer,
-    current_token: *token.Token,
-    peek_token: *token.Token,
-
-    pub fn init(lex: *token.Lexer) !Parser {
-        const first = try lex.nextToken();
-        const second = try lex.nextToken();
-        return Parser{
-            .lexer = lex,
-            .current_token = first,
-            .peek_token = second,
-        };
-    }
-
-    pub fn deinit(self: *Parser) void {
-        return self.lexer.deinit();
-    }
-
-    pub fn nextToken(self: *Parser) !void {
-        self.current_token = self.peek_token;
-        self.peek_token = try self.lexer.nextToken();
-    }
-};
-
-test "create parser over string" {
-    const input = "let x = 3";
-    const allocator = std.testing.allocator;
-    var lexer = token.Lexer.init(allocator, input);
-    defer lexer.deinit();
-
-    const parser = try Parser.init(&lexer);
-    try std.testing.expectEqualStrings(parser.current_token.literal, "let");
-    try std.testing.expectEqualStrings(parser.peek_token.literal, "x");
-}
