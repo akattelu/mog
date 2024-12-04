@@ -49,10 +49,6 @@ pub const Token = struct {
     start_pos: u32,
     end_pos: u32,
 
-    fn init(t: TokenType, literal: []const u8, start_pos: u32, end_pos: u32) Token {
-        return Token{ .type = t, .literal = literal, .start_pos = start_pos, .end_pos = end_pos };
-    }
-
     pub fn toString(self: *const Token, buf: *const []u8) []const u8 {
         return std.fmt.bufPrint(buf.*, "{s}@{d}..{d}", .{ self.literal, self.start_pos, self.end_pos }) catch {
             return self.literal;
@@ -68,15 +64,23 @@ fn isLetter(ch: u8) bool {
 }
 
 pub const Lexer = struct {
+    alloc: std.heap.ArenaAllocator,
     input: []const u8,
     position: u32,
     read_position: u32,
     ch: u8,
 
-    pub fn init(input: []const u8) Lexer {
-        var l = Lexer{ .input = input, .position = 0, .read_position = 0, .ch = 0 };
+    pub const LexError = error{ EOF, Illegal };
+
+    pub fn init(allocator: std.mem.Allocator, input: []const u8) Lexer {
+        const arena = std.heap.ArenaAllocator.init(allocator);
+        var l = Lexer{ .input = input, .position = 0, .read_position = 0, .ch = 0, .alloc = arena };
         l.readChar();
         return l;
+    }
+
+    pub fn deinit(self: *Lexer) void {
+        self.alloc.deinit();
     }
 
     fn readChar(self: *Lexer) void {
@@ -120,12 +124,12 @@ pub const Lexer = struct {
         }
     }
 
-    pub fn nextToken(self: *Lexer) ?Token {
+    pub fn nextToken(self: *Lexer) !*Token {
         var tokType: TokenType = TokenType.illegal;
         var literal: []const u8 = "";
         self.skipWhitespace();
         if (self.read_position > self.input.len) {
-            return null;
+            return LexError.EOF;
         }
 
         switch (self.ch) {
@@ -202,32 +206,34 @@ pub const Lexer = struct {
                 literal = "";
             },
             else => {
+                const tok = try self.alloc.allocator().create(Token);
                 if (isLetter(self.ch)) {
-                    literal = self.readIdent();
-                    tokType = TokenType.fromIdent(literal);
-                    return Token.init(tokType, literal, @intCast(self.position - literal.len), self.position - 1);
+                    tok.literal = self.readIdent();
+                    tok.type = TokenType.fromIdent(tok.literal);
+                    tok.start_pos = @intCast(self.position - tok.literal.len);
+                    tok.end_pos = self.position - 1;
+                    return tok;
                 } else if (isDigit(self.ch)) {
-                    literal = self.readNumber();
-                    tokType = TokenType.int;
-                    return Token.init(tokType, literal, @intCast(self.position - literal.len), self.position - 1);
+                    tok.literal = self.readNumber();
+                    tok.type = TokenType.int;
+                    tok.start_pos = @intCast(self.position - tok.literal.len);
+                    tok.end_pos = self.position - 1;
+                    return tok;
                 } else {
-                    return null;
+                    return LexError.Illegal;
                 }
             },
         }
 
         self.readChar();
-        return Token.init(tokType, literal, @intCast(self.position - literal.len), self.position - 1);
+        const tok = try self.alloc.allocator().create(Token);
+        tok.literal = literal;
+        tok.type = tokType;
+        tok.start_pos = @intCast(self.position - tok.literal.len);
+        tok.end_pos = self.position - 1;
+        return tok;
     }
 };
-
-test "token test" {
-    const tok = Token.init(TokenType.plus, "+", 0, 1);
-    try std.testing.expectEqualStrings(tok.literal, "+");
-    try std.testing.expectEqual(tok.type, TokenType.plus);
-    try std.testing.expectEqual(tok.start_pos, 0);
-    try std.testing.expectEqual(tok.end_pos, 1);
-}
 
 test "next token test" {
     const input =
@@ -328,13 +334,14 @@ test "next token test" {
         .{ .expectedType = TokenType.semicolon, .expectedLiteral = ";", .expectedStart = 171, .expectedEnd = 171 },
     };
 
-    var lexer = Lexer.init(input);
+    const allocator = std.testing.allocator;
+    var lexer = Lexer.init(allocator, input);
+    defer lexer.deinit();
     for (tests) |t| {
-        const tok = lexer.nextToken();
-        try std.testing.expect(tok != null);
-        try std.testing.expectEqualStrings(tok.?.literal, t.expectedLiteral);
-        try std.testing.expectEqual(tok.?.type, t.expectedType);
-        try std.testing.expectEqual(tok.?.start_pos, t.expectedStart);
-        try std.testing.expectEqual(tok.?.end_pos, t.expectedEnd);
+        const tok = (try lexer.nextToken()).*;
+        try std.testing.expectEqualStrings(t.expectedLiteral, tok.literal);
+        try std.testing.expectEqual(t.expectedType, tok.type);
+        try std.testing.expectEqual(t.expectedStart, tok.start_pos);
+        try std.testing.expectEqual(t.expectedEnd, tok.end_pos);
     }
 }
