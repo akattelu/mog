@@ -2,14 +2,15 @@ const std = @import("std");
 const token = @import("token.zig");
 const lex = @import("lexer.zig");
 const ast = @import("ast.zig");
+const TokenType = token.TokenType;
 
 pub const Parser = struct {
     lexer: *lex.Lexer,
     current_token: *token.Token,
     peek_token: *token.Token,
     parser_error: ?*const []u8,
-    prefix_parse_fns: std.AutoHashMap(token.TokenType, PrefixParseFn),
-    infix_parse_fns: std.AutoHashMap(token.TokenType, InfixParseFn),
+    prefix_parse_fns: std.AutoHashMap(TokenType, PrefixParseFn),
+    infix_parse_fns: std.AutoHashMap(TokenType, InfixParseFn),
     alloc: std.heap.ArenaAllocator,
 
     const ParserError = error{fail};
@@ -25,8 +26,8 @@ pub const Parser = struct {
             .current_token = first,
             .peek_token = second,
             .parser_error = null,
-            .prefix_parse_fns = std.AutoHashMap(token.TokenType, PrefixParseFn).init(alloc.allocator()),
-            .infix_parse_fns = std.AutoHashMap(token.TokenType, InfixParseFn).init(alloc.allocator()),
+            .prefix_parse_fns = std.AutoHashMap(TokenType, PrefixParseFn).init(alloc.allocator()),
+            .infix_parse_fns = std.AutoHashMap(TokenType, InfixParseFn).init(alloc.allocator()),
             .alloc = alloc,
         };
     }
@@ -40,15 +41,15 @@ pub const Parser = struct {
         self.peek_token = try self.lexer.nextToken();
     }
 
-    fn registerPrefix(self: *Parser, tok: token.TokenType, f: PrefixParseFn) !void {
+    fn registerPrefix(self: *Parser, tok: TokenType, f: PrefixParseFn) !void {
         try self.prefix_parse_fns.put(tok, f);
     }
 
-    fn registerInfix(self: *Parser, tok: token.TokenType, f: InfixParseFn) !void {
+    fn registerInfix(self: *Parser, tok: TokenType, f: InfixParseFn) !void {
         try self.infix_parse_fns.put(tok, f);
     }
 
-    fn setPeekError(self: *Parser, t: token.TokenType) !void {
+    fn setPeekError(self: *Parser, t: TokenType) !void {
         const msg = try std.fmt.allocPrint(
             self.alloc.allocator(),
             "expected next token to be {s}, got {s} instead at position {d}..{d}",
@@ -62,15 +63,15 @@ pub const Parser = struct {
         self.parser_error = &msg;
     }
 
-    fn currentTokenIs(self: *Parser, t: token.TokenType) bool {
+    fn currentTokenIs(self: *Parser, t: TokenType) bool {
         return self.current_token.type == t;
     }
 
-    fn peekTokenIs(self: *Parser, t: token.TokenType) bool {
+    fn peekTokenIs(self: *Parser, t: TokenType) bool {
         return self.peek_token.type == t;
     }
 
-    fn expectAndPeek(self: *Parser, t: token.TokenType) bool {
+    fn expectAndPeek(self: *Parser, t: TokenType) bool {
         if (self.peekTokenIs(t)) {
             self.nextToken() catch return false;
             return true;
@@ -143,7 +144,7 @@ pub const Parser = struct {
         const es = try self.alloc.allocator().create(ast.ExpressionStatement);
         es.token = self.current_token.*;
         es.expr = try self.parseExpression();
-        if (self.peekTokenIs(token.TokenType.semicolon)) {
+        if (self.peekTokenIs(TokenType.semicolon)) {
             try self.nextToken();
         }
         return es;
