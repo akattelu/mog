@@ -74,7 +74,7 @@ pub const ExpressionTypes = enum {
     Identifier,
 };
 pub const Expression = union(ExpressionTypes) {
-    Identifier: Identifier,
+    Identifier: *Identifier,
     pub fn tokenLiteral(self: *const Statement) []const u8 {
         switch (self.*) {
             .Identifier => |n| return n.tokenLiteral(),

@@ -8,17 +8,25 @@ pub const Parser = struct {
     current_token: *token.Token,
     peek_token: *token.Token,
     parser_error: ?*const []u8,
+    prefix_parse_fns: std.AutoHashMap(token.TokenType, PrefixParseFn),
+    infix_parse_fns: std.AutoHashMap(token.TokenType, InfixParseFn),
     alloc: std.heap.ArenaAllocator,
+
+    const ParserError = error{fail};
+    const PrefixParseFn = *const fn () *ast.Expression;
+    const InfixParseFn = *const fn (*ast.Expression) *ast.Expression;
 
     pub fn init(allocator: std.mem.Allocator, lexer: *lex.Lexer) !Parser {
         const first = try lexer.nextToken();
         const second = try lexer.nextToken();
-        const alloc = std.heap.ArenaAllocator.init(allocator);
+        var alloc = std.heap.ArenaAllocator.init(allocator);
         return Parser{
             .lexer = lexer,
             .current_token = first,
             .peek_token = second,
             .parser_error = null,
+            .prefix_parse_fns = std.AutoHashMap(token.TokenType, PrefixParseFn).init(alloc.allocator()),
+            .infix_parse_fns = std.AutoHashMap(token.TokenType, InfixParseFn).init(alloc.allocator()),
             .alloc = alloc,
         };
     }
@@ -30,6 +38,14 @@ pub const Parser = struct {
     pub fn nextToken(self: *Parser) !void {
         self.current_token = self.peek_token;
         self.peek_token = try self.lexer.nextToken();
+    }
+
+    fn registerPrefix(self: *Parser, tok: token.TokenType, f: PrefixParseFn) !void {
+        try self.prefix_parse_fns.put(tok, f);
+    }
+
+    fn registerInfix(self: *Parser, tok: token.TokenType, f: InfixParseFn) !void {
+        try self.infix_parse_fns.put(tok, f);
     }
 
     fn setPeekError(self: *Parser, t: token.TokenType) !void {
@@ -86,16 +102,11 @@ pub const Parser = struct {
                 stmt.* = .{ .Return = try self.parseReturnStatement() };
             },
             else => {
-                unreachable;
+                stmt.* = .{ .Expression = try self.parseExpressionStatement() };
             },
-            // else => {
-            //     stmt.* = .{ .Expression = try self.parseExpression() };
-            // },
         }
         return stmt;
     }
-
-    const ParserError = error{fail};
 
     fn parseReturnStatement(self: *Parser) !*ast.ReturnStatement {
         const rs = try self.alloc.allocator().create(ast.ReturnStatement);
@@ -126,6 +137,22 @@ pub const Parser = struct {
             try self.nextToken();
         }
         return ls;
+    }
+
+    fn parseExpressionStatement(self: *Parser) !*ast.ExpressionStatement {
+        const es = try self.alloc.allocator().create(ast.ExpressionStatement);
+        es.token = self.current_token.*;
+        es.expr = try self.parseExpression();
+        if (self.peekTokenIs(token.TokenType.semicolon)) {
+            try self.nextToken();
+        }
+        return es;
+    }
+    fn parseExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        expr.* = .{ .Identifier = try self.parseIdentifier() };
+        try self.nextToken();
+        return expr;
     }
 
     fn parseIdentifier(self: *Parser) !*ast.Identifier {
@@ -213,16 +240,41 @@ test "return statements" {
     try testReturnStatement(program.statements[2], "");
 }
 
+test "identifier expressions" {
+    const input =
+        \\foobar;
+    ;
+
+    const allocator = std.testing.allocator;
+    const lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Identifier => |ident| {
+                    try std.testing.expectEqualStrings("foobar", ident.value);
+                },
+            }
+        },
+        else => unreachable,
+    }
+}
+
 test "string writer" {
     const test_cases = .{
         .{
             .input = "let x=10;",
             .expected_string = "let x = ;",
         },
-        // .{
-        //     .input = "myVar",
-        //     .expected_string = "myVar;",
-        // },
+        .{
+            .input = "myVar",
+            .expected_string = "myVar;",
+        },
         .{
             .input = "return 3;",
             .expected_string = "return ;",
