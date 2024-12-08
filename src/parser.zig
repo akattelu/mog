@@ -168,11 +168,11 @@ test "let statement errors" {
     const test_cases = .{
         .{
             .input = "let = 10;",
-            .expected_error = "expected next token to be ident",
+            .expected_error = "expected next token to be ident, got assign instead",
         },
         .{
             .input = "let x 10;",
-            .expected_error = "expected next token to be assign",
+            .expected_error = "expected next token to be assign, got int instead",
         },
     };
 
@@ -185,7 +185,7 @@ test "let statement errors" {
         defer parser.deinit();
         _ = parser.parseProgram() catch {
             const error_msg = if (parser.parser_error != null) parser.parser_error.?.* else "";
-            try std.testing.expect(std.mem.indexOf(u8, error_msg, test_case.expected_error) != null);
+            try std.testing.expectStringStartsWith(error_msg, test_case.expected_error);
         };
     }
 }
