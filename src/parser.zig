@@ -88,6 +88,9 @@ pub const Parser = struct {
             else => {
                 unreachable;
             },
+            // else => {
+            //     stmt.* = .{ .Expression = try self.parseExpression() };
+            // },
         }
         return stmt;
     }
@@ -216,6 +219,10 @@ test "string writer" {
             .input = "let x=10;",
             .expected_string = "let x = ;",
         },
+        // .{
+        //     .input = "myVar",
+        //     .expected_string = "myVar;",
+        // },
         .{
             .input = "return 3;",
             .expected_string = "return ;",
