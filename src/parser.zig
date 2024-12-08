@@ -210,6 +210,33 @@ test "return statements" {
     try testReturnStatement(program.statements[2], "");
 }
 
+test "string writer" {
+    const test_cases = .{
+        .{
+            .input = "let x=10;",
+            .expected_string = "let x = ;",
+        },
+        .{
+            .input = "return 3;",
+            .expected_string = "return ;",
+        },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        const lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, lexer);
+        try assertNoErrors(&parser);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        var list = std.ArrayList(u8).init(allocator);
+        defer list.deinit();
+        try program.write(list.writer());
+        try std.testing.expectEqualStrings(tc.expected_string, list.items);
+    }
+}
+
 fn testLetStatement(s: *ast.Statement, name: []const u8) !void {
     try std.testing.expectEqualStrings("let", s.tokenLiteral());
 
