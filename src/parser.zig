@@ -118,10 +118,14 @@ pub const Parser = struct {
     fn parseReturnStatement(self: *Parser) !*ast.ReturnStatement {
         const rs = try self.alloc.allocator().create(ast.ReturnStatement);
         rs.token = self.current_token.*;
-        rs.expr = null;
+        if (self.peekTokenIs(TokenType.semicolon)) {
+            rs.expr = null;
+            try self.nextToken();
+            return rs;
+        }
         try self.nextToken();
-        // NOTE: skip until semicolon for now
-        while (self.current_token.type != .semicolon) {
+        rs.expr = try self.parseExpression(Precedence.lowest);
+        if (self.peekTokenIs(TokenType.semicolon)) {
             try self.nextToken();
         }
         return rs;
@@ -137,12 +141,15 @@ pub const Parser = struct {
         if (!self.expectAndPeek(.assign)) {
             return ParserError.fail;
         }
-        ls.expr = null;
+        try self.nextToken();
 
-        // NOTE: skip until semicolon for now
-        while (self.current_token.type != .semicolon) {
+        const expr = try self.parseExpression(Precedence.lowest);
+        ls.expr = expr;
+
+        if (self.peekTokenIs(TokenType.semicolon)) {
             try self.nextToken();
         }
+
         return ls;
     }
 
@@ -220,11 +227,15 @@ test "let statements" {
     try testLetStatement(program.statements[1], "foo");
 }
 
-test "let statement errors" {
+test "statement errors" {
     const test_cases = .{
         .{
             .input = "let = 10;",
             .expected_error = "expected next token to be ident, got assign instead",
+        },
+        .{
+            .input = "let x 10;",
+            .expected_error = "expected next token to be assign, got int instead",
         },
         .{
             .input = "let x 10;",
@@ -326,15 +337,19 @@ test "string writer" {
     const test_cases = .{
         .{
             .input = "let x=10;",
-            .expected_string = "let x = ;",
+            .expected_string = "let x = 10;",
         },
         .{
-            .input = "myVar",
+            .input = "myVar;",
             .expected_string = "myVar;",
         },
         .{
+            .input = "42;",
+            .expected_string = "42;",
+        },
+        .{
             .input = "return 3;",
-            .expected_string = "return ;",
+            .expected_string = "return 3;",
         },
     };
 
