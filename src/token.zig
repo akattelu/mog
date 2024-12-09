@@ -28,18 +28,18 @@ pub const TokenType = enum {
     eq,
     neq,
 
+    const KeywordMap = std.StaticStringMap(TokenType).initComptime(.{
+        .{ "fn", .function },
+        .{ "let", .let },
+        .{ "if", .t_if },
+        .{ "else", .t_else },
+        .{ "true", .true },
+        .{ "false", .false },
+        .{ "return", .t_return },
+    });
+
     pub fn fromIdent(lit: []const u8) TokenType {
-        const keywords = std.StaticStringMap(TokenType);
-        const map = keywords.initComptime(.{
-            .{ "fn", .function },
-            .{ "let", .let },
-            .{ "if", .t_if },
-            .{ "else", .t_else },
-            .{ "true", .true },
-            .{ "false", .false },
-            .{ "return", .t_return },
-        });
-        return map.get(lit) orelse .ident;
+        return KeywordMap.get(lit) orelse .ident;
     }
 };
 
