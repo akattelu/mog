@@ -162,6 +162,10 @@ pub const Parser = struct {
         return es;
     }
 
+    fn parsePrefixExpression(_: *Parser) !*ast.Expression {
+        return ParserError.fail;
+    }
+
     fn parseExpression(self: *Parser, _: Precedence) !*ast.Expression {
         var expr = try self.alloc.allocator().create(ast.Expression);
         const prefix = PrefixMap.get(@tagName(self.current_token.type));

@@ -1,5 +1,6 @@
 const std = @import("std");
 const token = @import("token.zig");
+const AllocatorError = std.mem.Allocator.Error;
 
 pub const StatementTypes = enum { Let, Return, Expression };
 pub const Statement = union(StatementTypes) {
@@ -69,20 +70,21 @@ pub const ExpressionStatement = struct {
     }
 };
 
-pub const ExpressionTypes = enum { Identifier, Integer };
+pub const ExpressionTypes = enum { Identifier, Integer, Prefix };
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
     Integer: *Integer,
+    Prefix: *PrefixExpression,
+
     pub fn tokenLiteral(self: *const Expression) []const u8 {
-        switch (self.*) {
-            .Identifier => |n| return n.tokenLiteral(),
-            .Integer => |n| return n.tokenLiteral(),
-        }
+        return self.tokenLiteral();
     }
+
     pub fn write(self: *const Expression, writer: anytype) !void {
         switch (self.*) {
             .Identifier => |n| try n.write(writer),
             .Integer => |n| try n.write(writer),
+            .Prefix => |n| try n.write(writer),
         }
     }
 };
@@ -97,6 +99,25 @@ pub const Identifier = struct {
         _ = try writer.writeAll(self.value);
     }
 };
+
+pub const PrefixExpression = struct {
+    token: token.Token,
+    operator: []const u8,
+    expression: *Expression,
+
+    pub fn tokenLiteral(self: *const PrefixExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    pub fn write(self: *PrefixExpression, writer: anytype) AllocatorError!void {
+        _ = try writer.writeAll("(");
+        _ = try writer.writeAll(self.operator);
+        _ = try writer.writeAll(" ");
+        try self.expression.write(writer);
+        _ = try writer.writeAll(")");
+    }
+};
+
 pub const Integer = struct {
     token: token.Token,
     value: i32,
