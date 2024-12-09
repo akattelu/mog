@@ -59,11 +59,10 @@ pub const LetStatement = struct {
 };
 
 pub const ExpressionStatement = struct {
-    token: token.Token,
     expr: *Expression,
 
     pub fn tokenLiteral(self: *const ExpressionStatement) []const u8 {
-        return self.token.literal;
+        return self.expr.tokenLiteral();
     }
     pub fn write(self: *const ExpressionStatement, writer: anytype) !void {
         try self.expr.write(writer);
@@ -75,7 +74,7 @@ pub const ExpressionTypes = enum {
 };
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
-    pub fn tokenLiteral(self: *const Statement) []const u8 {
+    pub fn tokenLiteral(self: *const Expression) []const u8 {
         switch (self.*) {
             .Identifier => |n| return n.tokenLiteral(),
         }

@@ -3,33 +3,43 @@ const token = @import("token.zig");
 const lex = @import("lexer.zig");
 const ast = @import("ast.zig");
 const TokenType = token.TokenType;
+const AllocError = std.mem.Allocator.Error;
 
 pub const Parser = struct {
     lexer: *lex.Lexer,
     current_token: *token.Token,
     peek_token: *token.Token,
     parser_error: ?*const []u8,
-    prefix_parse_fns: std.AutoHashMap(TokenType, PrefixParseFn),
-    infix_parse_fns: std.AutoHashMap(TokenType, InfixParseFn),
     alloc: std.heap.ArenaAllocator,
 
     const ParserError = error{fail};
-    const PrefixParseFn = *const fn () *ast.Expression;
-    const InfixParseFn = *const fn (*ast.Expression) *ast.Expression;
+    const PrefixParseFn = *const fn (*Parser) (ParserError || AllocError)!*ast.Expression;
+    const InfixParseFn = *const fn (*Parser, *ast.Expression) (ParserError || AllocError)!*ast.Expression;
+
+    const Precedence = enum(u8) { lowest, equals, lessgreater, sum, product, prefix, call };
+
+    const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
+        .{ "ident", &parseIdentifierExpression },
+    });
 
     pub fn init(allocator: std.mem.Allocator, lexer: *lex.Lexer) !Parser {
-        const first = try lexer.nextToken();
-        const second = try lexer.nextToken();
         var alloc = std.heap.ArenaAllocator.init(allocator);
-        return Parser{
+        const arena = alloc.allocator();
+
+        // Create tokens using the arena allocator
+        const first = try arena.create(token.Token);
+        first.* = (try lexer.nextToken()).*;
+        const second = try arena.create(token.Token);
+        second.* = (try lexer.nextToken()).*;
+
+        const parser = Parser{
             .lexer = lexer,
             .current_token = first,
             .peek_token = second,
             .parser_error = null,
-            .prefix_parse_fns = std.AutoHashMap(TokenType, PrefixParseFn).init(alloc.allocator()),
-            .infix_parse_fns = std.AutoHashMap(TokenType, InfixParseFn).init(alloc.allocator()),
             .alloc = alloc,
         };
+        return parser;
     }
 
     pub fn deinit(self: *Parser) void {
@@ -38,15 +48,9 @@ pub const Parser = struct {
 
     pub fn nextToken(self: *Parser) !void {
         self.current_token = self.peek_token;
-        self.peek_token = try self.lexer.nextToken();
-    }
-
-    fn registerPrefix(self: *Parser, tok: TokenType, f: PrefixParseFn) !void {
-        try self.prefix_parse_fns.put(tok, f);
-    }
-
-    fn registerInfix(self: *Parser, tok: TokenType, f: InfixParseFn) !void {
-        try self.infix_parse_fns.put(tok, f);
+        const new_token = try self.alloc.allocator().create(token.Token);
+        new_token.* = (try self.lexer.nextToken()).*;
+        self.peek_token = new_token;
     }
 
     fn setPeekError(self: *Parser, t: TokenType) !void {
@@ -142,16 +146,20 @@ pub const Parser = struct {
 
     fn parseExpressionStatement(self: *Parser) !*ast.ExpressionStatement {
         const es = try self.alloc.allocator().create(ast.ExpressionStatement);
-        es.token = self.current_token.*;
-        es.expr = try self.parseExpression();
+        es.expr = try self.parseExpression(Precedence.lowest);
         if (self.peekTokenIs(TokenType.semicolon)) {
             try self.nextToken();
         }
         return es;
     }
-    fn parseExpression(self: *Parser) !*ast.Expression {
-        const expr = try self.alloc.allocator().create(ast.Expression);
-        expr.* = .{ .Identifier = try self.parseIdentifier() };
+
+    fn parseExpression(self: *Parser, _: Precedence) !*ast.Expression {
+        var expr = try self.alloc.allocator().create(ast.Expression);
+        const prefix = PrefixMap.get(@tagName(self.current_token.type));
+        if (prefix == null) {
+            return ParserError.fail;
+        }
+        expr = try prefix.?(self);
         try self.nextToken();
         return expr;
     }
@@ -162,6 +170,12 @@ pub const Parser = struct {
         ident.value = self.current_token.*.literal;
 
         return ident;
+    }
+    fn parseIdentifierExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const ident = try self.parseIdentifier();
+        expr.* = .{ .Identifier = ident };
+        return expr;
     }
 };
 
