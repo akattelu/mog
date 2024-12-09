@@ -4,6 +4,7 @@ const lex = @import("lexer.zig");
 const ast = @import("ast.zig");
 const TokenType = token.TokenType;
 const AllocError = std.mem.Allocator.Error;
+const LexError = lex.Lexer.LexError;
 
 pub const Parser = struct {
     lexer: *lex.Lexer,
@@ -13,7 +14,7 @@ pub const Parser = struct {
     alloc: std.heap.ArenaAllocator,
 
     const ParserError = error{fail};
-    const SuperError = (ParserError || AllocError || std.fmt.ParseIntError);
+    const SuperError = (LexError || ParserError || AllocError || std.fmt.ParseIntError);
     const PrefixParseFn = *const fn (*Parser) SuperError!*ast.Expression;
     const InfixParseFn = *const fn (*Parser, *ast.Expression) SuperError!*ast.Expression;
 
@@ -22,6 +23,8 @@ pub const Parser = struct {
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
         .{ "ident", &parseIdentifierExpression },
         .{ "int", &parseIntegerExpression },
+        .{ "bang", &parsePrefixExpression },
+        .{ "minus", &parsePrefixExpression },
     });
 
     pub fn init(allocator: std.mem.Allocator, lexer: *lex.Lexer) !Parser {
@@ -162,11 +165,20 @@ pub const Parser = struct {
         return es;
     }
 
-    fn parsePrefixExpression(_: *Parser) !*ast.Expression {
-        return ParserError.fail;
+    fn parsePrefixExpression(self: *Parser) SuperError!*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const prefix_expr = try self.alloc.allocator().create(ast.PrefixExpression);
+
+        prefix_expr.token = self.current_token.*;
+        prefix_expr.operator = prefix_expr.token.literal;
+        try self.nextToken();
+        prefix_expr.expression = try self.parseExpression(Precedence.lowest);
+
+        expr.* = .{ .Prefix = prefix_expr };
+        return expr;
     }
 
-    fn parseExpression(self: *Parser, _: Precedence) !*ast.Expression {
+    fn parseExpression(self: *Parser, _: Precedence) SuperError!*ast.Expression {
         var expr = try self.alloc.allocator().create(ast.Expression);
         const prefix = PrefixMap.get(@tagName(self.current_token.type));
         if (prefix == null) {
@@ -337,6 +349,50 @@ test "integer expressions" {
     }
 }
 
+test "prefix expressions" {
+    const test_cases = .{
+        .{
+            .input = "-15;",
+            .operator = "-",
+            .value = 15,
+        },
+        .{
+            .input = "!5;",
+            .operator = "!",
+            .value = 5,
+        },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        const lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+        try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+        switch (program.statements[0].*) {
+            .Expression => |e| {
+                switch (e.expr.*) {
+                    .Prefix => |p| {
+                        try std.testing.expectEqualStrings(tc.operator, p.operator);
+                        switch (p.expression.*) {
+                            .Integer => |int| {
+                                try std.testing.expectEqual(tc.value, int.value);
+                            },
+                            else => unreachable,
+                        }
+                    },
+                    else => unreachable,
+                }
+            },
+            else => unreachable,
+        }
+    }
+}
+
 test "string writer" {
     const test_cases = .{
         .{
@@ -394,6 +450,8 @@ fn testReturnStatement(s: *ast.Statement, _: []const u8) !void {
         else => unreachable,
     }
 }
+
+// fn testIntegerExpression(e: *ast.Expresion, expected: i32) !void {}
 
 fn assertNoErrors(p: *Parser) !void {
     try std.testing.expectEqual(p.parser_error, null);
