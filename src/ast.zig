@@ -109,7 +109,7 @@ pub const PrefixExpression = struct {
         return self.token.literal;
     }
 
-    pub fn write(self: *PrefixExpression, writer: anytype) AllocatorError!void {
+    pub fn write(self: *PrefixExpression, writer: anytype) (AllocatorError || std.fs.File.Writer.Error)!void {
         _ = try writer.writeAll("(");
         _ = try writer.writeAll(self.operator);
         _ = try writer.writeAll(" ");

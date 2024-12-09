@@ -13,7 +13,7 @@ pub const Parser = struct {
     parser_error: ?*const []u8,
     alloc: std.heap.ArenaAllocator,
 
-    const ParserError = error{fail};
+    pub const ParserError = error{fail};
     const SuperError = (LexError || ParserError || AllocError || std.fmt.ParseIntError);
     const PrefixParseFn = *const fn (*Parser) SuperError!*ast.Expression;
     const InfixParseFn = *const fn (*Parser, *ast.Expression) SuperError!*ast.Expression;
