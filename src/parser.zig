@@ -13,13 +13,15 @@ pub const Parser = struct {
     alloc: std.heap.ArenaAllocator,
 
     const ParserError = error{fail};
-    const PrefixParseFn = *const fn (*Parser) (ParserError || AllocError)!*ast.Expression;
-    const InfixParseFn = *const fn (*Parser, *ast.Expression) (ParserError || AllocError)!*ast.Expression;
+    const SuperError = (ParserError || AllocError || std.fmt.ParseIntError);
+    const PrefixParseFn = *const fn (*Parser) SuperError!*ast.Expression;
+    const InfixParseFn = *const fn (*Parser, *ast.Expression) SuperError!*ast.Expression;
 
     const Precedence = enum(u8) { lowest, equals, lessgreater, sum, product, prefix, call };
 
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
         .{ "ident", &parseIdentifierExpression },
+        .{ "int", &parseIntegerExpression },
     });
 
     pub fn init(allocator: std.mem.Allocator, lexer: *lex.Lexer) !Parser {
@@ -171,10 +173,19 @@ pub const Parser = struct {
 
         return ident;
     }
+
     fn parseIdentifierExpression(self: *Parser) !*ast.Expression {
         const expr = try self.alloc.allocator().create(ast.Expression);
         const ident = try self.parseIdentifier();
         expr.* = .{ .Identifier = ident };
+        return expr;
+    }
+
+    fn parseIntegerExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const int = try self.alloc.allocator().create(ast.Integer);
+        int.value = try std.fmt.parseInt(i32, self.current_token.literal, 10);
+        expr.* = .{ .Integer = int };
         return expr;
     }
 };
@@ -273,6 +284,37 @@ test "identifier expressions" {
             switch (e.expr.*) {
                 .Identifier => |ident| {
                     try std.testing.expectEqualStrings("foobar", ident.value);
+                },
+                else => {
+                    unreachable;
+                },
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "integer expressions" {
+    const input =
+        \\42;
+    ;
+
+    const allocator = std.testing.allocator;
+    const lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Integer => |int| {
+                    try std.testing.expectEqual(42, int.value);
+                },
+                else => {
+                    unreachable;
                 },
             }
         },

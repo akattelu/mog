@@ -69,19 +69,20 @@ pub const ExpressionStatement = struct {
     }
 };
 
-pub const ExpressionTypes = enum {
-    Identifier,
-};
+pub const ExpressionTypes = enum { Identifier, Integer };
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
+    Integer: *Integer,
     pub fn tokenLiteral(self: *const Expression) []const u8 {
         switch (self.*) {
             .Identifier => |n| return n.tokenLiteral(),
+            .Integer => |n| return n.tokenLiteral(),
         }
     }
     pub fn write(self: *const Expression, writer: anytype) !void {
         switch (self.*) {
             .Identifier => |n| try n.write(writer),
+            .Integer => |n| try n.write(writer),
         }
     }
 };
@@ -94,6 +95,16 @@ pub const Identifier = struct {
     }
     pub fn write(self: *const Identifier, writer: anytype) !void {
         _ = try writer.writeAll(self.value);
+    }
+};
+pub const Integer = struct {
+    token: token.Token,
+    value: i32,
+    pub fn tokenLiteral(self: *const Integer) []const u8 {
+        return self.token.literal;
+    }
+    pub fn write(self: *const Integer, writer: anytype) !void {
+        try writer.print("{d}", .{self.value});
     }
 };
 
