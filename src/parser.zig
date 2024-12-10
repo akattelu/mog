@@ -217,8 +217,9 @@ pub const Parser = struct {
         infix_expr.token = self.current_token.*;
         infix_expr.operator = infix_expr.token.literal;
         infix_expr.left = left;
+        const prec = (self.currentPrecedence());
         try self.nextToken();
-        infix_expr.right = try self.parseExpression(self.currentPrecedence());
+        infix_expr.right = try self.parseExpression(prec);
 
         expr.* = .{ .Infix = infix_expr };
         return expr;
@@ -462,6 +463,76 @@ test "infix expressions" {
             },
             else => unreachable,
         }
+    }
+}
+
+test "infix expressions: write" {
+    const test_cases = .{
+        .{
+            .input = "5 + 3;",
+            .expected_string = "(5 + 3);",
+        },
+        .{
+            .input = "5 - 3;",
+            .expected_string = "(5 - 3);",
+        },
+        .{
+            .input = "5 * 3;",
+            .expected_string = "(5 * 3);",
+        },
+        .{
+            .input = "5 / 3;",
+            .expected_string = "(5 / 3);",
+        },
+        .{
+            .input = "5 > 3;",
+            .expected_string = "(5 > 3);",
+        },
+        .{
+            .input = "5 < 3;",
+            .expected_string = "(5 < 3);",
+        },
+        .{
+            .input = "5 == 3;",
+            .expected_string = "(5 == 3);",
+        },
+        .{
+            .input = "5 != 3;",
+            .expected_string = "(5 != 3);",
+        },
+        // Test operator precedence
+        .{
+            .input = "5 + 3 * 2;",
+            .expected_string = "(5 + (3 * 2));",
+        },
+        .{
+            .input = "5 * 3 + 2;",
+            .expected_string = "((5 * 3) + 2);",
+        },
+        .{
+            .input = "5 + 3 + 2;",
+            .expected_string = "((5 + 3) + 2);",
+        },
+        // Test with identifiers
+        .{
+            .input = "x + y;",
+            .expected_string = "(x + y);",
+        },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        const lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var list = std.ArrayList(u8).init(allocator);
+        defer list.deinit();
+        try program.write(list.writer());
+        try std.testing.expectEqualStrings(tc.expected_string, list.items);
     }
 }
 
