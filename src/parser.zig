@@ -18,8 +18,33 @@ pub const Parser = struct {
     const PrefixParseFn = *const fn (*Parser) SuperError!*ast.Expression;
     const InfixParseFn = *const fn (*Parser, *ast.Expression) SuperError!*ast.Expression;
 
-    const Precedence = enum(u8) { lowest, equals, lessgreater, sum, product, prefix, call };
+    // Precedence defines precedence for Pratt parsing infix operators
+    const Precedence = enum(u8) {
+        lowest,
+        equals,
+        lessgreater,
+        sum,
+        product,
+        prefix,
+        call,
 
+        const TokenPrecedenceMap = std.StaticStringMap(Precedence).initComptime(.{ .{ "eq", Precedence.equals }, .{ "neq", Precedence.equals }, .{ "lt", Precedence.lessgreater }, .{ "gt", Precedence.lessgreater }, .{ "plus", Precedence.sum }, .{ "minus", Precedence.sum }, .{ "slash", Precedence.product }, .{ "asterisk", Precedence.product }, .{ "lparen", Precedence.call } });
+
+        fn ofToken(t: TokenType) Precedence {
+            return TokenPrecedenceMap.get(@tagName(t)) orelse Precedence.lowest;
+        }
+    };
+
+    const InfixMap = std.StaticStringMap(InfixParseFn).initComptime(.{
+        .{ "plus", &parseInfixExpression },
+        .{ "minus", &parseInfixExpression },
+        .{ "slash", &parseInfixExpression },
+        .{ "asterisk", &parseInfixExpression },
+        .{ "eq", &parseInfixExpression },
+        .{ "neq", &parseInfixExpression },
+        .{ "lt", &parseInfixExpression },
+        .{ "gt", &parseInfixExpression },
+    });
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
         .{ "ident", &parseIdentifierExpression },
         .{ "int", &parseIntegerExpression },
@@ -87,6 +112,13 @@ pub const Parser = struct {
         }
         self.setPeekError(t) catch {};
         return false;
+    }
+
+    fn currentPrecedence(self: *Parser) Precedence {
+        return Precedence.ofToken(self.current_token.*.type);
+    }
+    fn peekPrecedence(self: *Parser) Precedence {
+        return Precedence.ofToken(self.peek_token.*.type);
     }
 
     pub fn parseProgram(self: *Parser) !*ast.Program {
@@ -178,15 +210,35 @@ pub const Parser = struct {
         return expr;
     }
 
-    fn parseExpression(self: *Parser, _: Precedence) SuperError!*ast.Expression {
-        var expr = try self.alloc.allocator().create(ast.Expression);
+    fn parseInfixExpression(self: *Parser, left: *ast.Expression) SuperError!*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const infix_expr = try self.alloc.allocator().create(ast.InfixExpression);
+
+        infix_expr.token = self.current_token.*;
+        infix_expr.operator = infix_expr.token.literal;
+        infix_expr.left = left;
+        try self.nextToken();
+        infix_expr.right = try self.parseExpression(self.currentPrecedence());
+
+        expr.* = .{ .Infix = infix_expr };
+        return expr;
+    }
+
+    fn parseExpression(self: *Parser, precedence: Precedence) SuperError!*ast.Expression {
+        var left = try self.alloc.allocator().create(ast.Expression);
         const prefix = PrefixMap.get(@tagName(self.current_token.type));
         if (prefix == null) {
+            // TODO: tag parser error
             return ParserError.fail;
         }
-        expr = try prefix.?(self);
-        try self.nextToken();
-        return expr;
+        left = try prefix.?(self);
+
+        while (!self.peekTokenIs(TokenType.semicolon) and @intFromEnum(precedence) < @intFromEnum(self.peekPrecedence())) {
+            const infix = InfixMap.get(@tagName(self.peek_token.type)) orelse return left;
+            try self.nextToken();
+            left = try infix(self, left);
+        }
+        return left;
     }
 
     fn parseIdentifier(self: *Parser) !*ast.Identifier {
@@ -346,6 +398,70 @@ test "integer expressions" {
             }
         },
         else => unreachable,
+    }
+}
+
+test "infix expressions" {
+    const test_cases = .{
+        .{
+            .input = "5 + 3;",
+            .left_value = 5,
+            .operator = "+",
+            .right_value = 3,
+        },
+        .{
+            .input = "10 - 7;",
+            .left_value = 10,
+            .operator = "-",
+            .right_value = 7,
+        },
+        .{
+            .input = "8 * 2;",
+            .left_value = 8,
+            .operator = "*",
+            .right_value = 2,
+        },
+        .{
+            .input = "15 / 3;",
+            .left_value = 15,
+            .operator = "/",
+            .right_value = 3,
+        },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        const lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+        try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+        switch (program.statements[0].*) {
+            .Expression => |e| {
+                switch (e.expr.*) {
+                    .Infix => |inf| {
+                        try std.testing.expectEqualStrings(tc.operator, inf.operator);
+                        switch (inf.left.*) {
+                            .Integer => |left_int| {
+                                try std.testing.expectEqual(tc.left_value, left_int.value);
+                            },
+                            else => unreachable,
+                        }
+                        switch (inf.right.*) {
+                            .Integer => |right_int| {
+                                try std.testing.expectEqual(tc.right_value, right_int.value);
+                            },
+                            else => unreachable,
+                        }
+                    },
+                    else => unreachable,
+                }
+            },
+            else => unreachable,
+        }
     }
 }
 

@@ -70,11 +70,12 @@ pub const ExpressionStatement = struct {
     }
 };
 
-pub const ExpressionTypes = enum { Identifier, Integer, Prefix };
+pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix };
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
     Integer: *Integer,
     Prefix: *PrefixExpression,
+    Infix: *InfixExpression,
 
     pub fn tokenLiteral(self: *const Expression) []const u8 {
         return self.tokenLiteral();
@@ -85,6 +86,7 @@ pub const Expression = union(ExpressionTypes) {
             .Identifier => |n| try n.write(writer),
             .Integer => |n| try n.write(writer),
             .Prefix => |n| try n.write(writer),
+            .Infix => |n| try n.write(writer),
         }
     }
 };
@@ -97,6 +99,27 @@ pub const Identifier = struct {
     }
     pub fn write(self: *const Identifier, writer: anytype) !void {
         _ = try writer.writeAll(self.value);
+    }
+};
+
+pub const InfixExpression = struct {
+    token: token.Token,
+    operator: []const u8,
+    left: *Expression,
+    right: *Expression,
+
+    pub fn tokenLiteral(self: *const InfixExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    pub fn write(self: *InfixExpression, writer: anytype) (AllocatorError || std.fs.File.Writer.Error)!void {
+        _ = try writer.writeAll("(");
+        try self.left.write(writer);
+        _ = try writer.writeAll(" ");
+        _ = try writer.writeAll(self.operator);
+        _ = try writer.writeAll(" ");
+        try self.right.write(writer);
+        _ = try writer.writeAll(")");
     }
 };
 
