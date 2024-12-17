@@ -27,18 +27,17 @@ pub const TokenType = enum {
     t_return,
     eq,
     neq,
+    t_type,
+    colon,
+    number,
+    string,
+    end,
+    then,
+    quote,
 
-    const KeywordMap = std.StaticStringMap(TokenType).initComptime(.{
-        .{ "fn", .function },
-        .{ "let", .let },
-        .{ "if", .t_if },
-        .{ "else", .t_else },
-        .{ "true", .true },
-        .{ "false", .false },
-        .{ "return", .t_return },
-    });
+    const KeywordMap = std.StaticStringMap(TokenType).initComptime(.{ .{ "function", .function }, .{ "let", .let }, .{ "if", .t_if }, .{ "else", .t_else }, .{ "true", .true }, .{ "false", .false }, .{ "return", .t_return }, .{ "type", .t_type }, .{ "number", .number }, .{ "string", .string }, .{ "end", .end }, .{ "then", .then } });
 
-    pub fn fromIdent(lit: []const u8) TokenType {
+    pub fn fromWord(lit: []const u8) TokenType {
         return KeywordMap.get(lit) orelse .ident;
     }
 };

@@ -328,7 +328,7 @@ test "statement errors" {
 
 test "return statements" {
     const input =
-        \\return x; 
+        \\return x;
         \\return 3;
         \\return;
     ;
