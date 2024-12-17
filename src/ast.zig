@@ -66,12 +66,13 @@ pub const ExpressionStatement = struct {
     }
 };
 
-pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix };
+pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix, Conditional };
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
     Integer: *Integer,
     Prefix: *PrefixExpression,
     Infix: *InfixExpression,
+    Conditional: *ConditionalExpression,
 
     pub fn tokenLiteral(self: *const Expression) []const u8 {
         return self.tokenLiteral();
@@ -83,6 +84,7 @@ pub const Expression = union(ExpressionTypes) {
             .Integer => |n| try n.write(writer),
             .Prefix => |n| try n.write(writer),
             .Infix => |n| try n.write(writer),
+            .Conditional => |n| try n.write(writer),
         }
     }
 };
@@ -136,6 +138,32 @@ pub const PrefixExpression = struct {
         _ = try writer.writeAll(")");
     }
 };
+
+pub const ConditionalExpression = struct {
+    token: token.Token,
+    condition: *Expression,
+    then_block: *Block,
+    else_block: ?*Block,
+
+    pub fn tokenLiteral(self: *const PrefixExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    pub fn write(self: *ConditionalExpression, writer: anytype) (AllocatorError || std.fs.File.Writer.Error)!void {
+        _ = try writer.writeAll("if ");
+        try self.condition.write(writer);
+        _ = try writer.writeAll(" then ");
+        try self.then_block.write(writer);
+        if (self.else_block != null) {
+            _ = try writer.writeAll(" else ");
+            try self.else_block.?.write(writer);
+        }
+        _ = try writer.writeAll("end");
+    }
+};
+
+// blocks are also collections of statements
+pub const Block = Program;
 
 pub const Integer = struct {
     token: token.Token,

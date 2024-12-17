@@ -581,6 +581,167 @@ test "prefix expressions" {
     }
 }
 
+test "if expressions" {
+    const input = "if (x < y) { x }";
+
+    const allocator = std.testing.allocator;
+    const lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    // Test that we got an expression statement
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Conditional => |cond| {
+                    // Test the condition is (x < y)
+                    switch (cond.condition.*) {
+                        .Infix => |inf| {
+                            try std.testing.expectEqualStrings("<", inf.operator);
+                            switch (inf.left.*) {
+                                .Identifier => |left_id| {
+                                    try std.testing.expectEqualStrings("x", left_id.value);
+                                },
+                                else => unreachable,
+                            }
+                            switch (inf.right.*) {
+                                .Identifier => |right_id| {
+                                    try std.testing.expectEqualStrings("y", right_id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+
+                    // Test the consequence block contains x
+                    try std.testing.expectEqual(@as(usize, 1), cond.then_block.statements.len);
+                    switch (cond.then_block.statements[0].*) {
+                        .Expression => |cons_expr| {
+                            switch (cons_expr.expr.*) {
+                                .Identifier => |id| {
+                                    try std.testing.expectEqualStrings("x", id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+
+                    // Test there is no alternative
+                    try std.testing.expect(cond.else_block == null);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "if else expressions" {
+    const input = "if (x < y) { x } else { y }";
+
+    const allocator = std.testing.allocator;
+    const lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Conditional => |cond| {
+                    // Test condition (x < y)
+                    switch (cond.condition.*) {
+                        .Infix => |inf| {
+                            try std.testing.expectEqualStrings("<", inf.operator);
+                            switch (inf.left.*) {
+                                .Identifier => |left_id| {
+                                    try std.testing.expectEqualStrings("x", left_id.value);
+                                },
+                                else => unreachable,
+                            }
+                            switch (inf.right.*) {
+                                .Identifier => |right_id| {
+                                    try std.testing.expectEqualStrings("y", right_id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+
+                    // Test consequence { x }
+                    try std.testing.expectEqual(@as(usize, 1), cond.then_block.statements.len);
+                    switch (cond.then_block.statements[0].*) {
+                        .Expression => |cons_expr| {
+                            switch (cons_expr.expr.*) {
+                                .Identifier => |id| {
+                                    try std.testing.expectEqualStrings("x", id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+
+                    // Test alternative { y }
+                    try std.testing.expect(cond.else_block != null);
+                    try std.testing.expectEqual(@as(usize, 1), cond.else_block.?.statements.len);
+                    switch (cond.else_block.?.statements[0].*) {
+                        .Expression => |alt_expr| {
+                            switch (alt_expr.expr.*) {
+                                .Identifier => |id| {
+                                    try std.testing.expectEqualStrings("y", id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "if expression string representation" {
+    const test_cases = .{
+        .{
+            .input = "if (x < y) { x }",
+            .expected_string = "if (x < y) { x }",
+        },
+        .{
+            .input = "if (x < y) { x } else { y }",
+            .expected_string = "if (x < y) { x } else { y }",
+        },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        const lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var list = std.ArrayList(u8).init(allocator);
+        defer list.deinit();
+        try program.write(list.writer());
+        try std.testing.expectEqualStrings(tc.expected_string, list.items);
+    }
+}
+
 test "string writer" {
     const test_cases = .{
         .{
@@ -638,8 +799,6 @@ fn testReturnStatement(s: *ast.Statement, _: []const u8) !void {
         else => unreachable,
     }
 }
-
-// fn testIntegerExpression(e: *ast.Expresion, expected: i32) !void {}
 
 fn assertNoErrors(p: *Parser) !void {
     try std.testing.expectEqual(p.parser_error, null);
