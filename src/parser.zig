@@ -229,7 +229,8 @@ pub const Parser = struct {
         var left = try self.alloc.allocator().create(ast.Expression);
         const prefix = PrefixMap.get(@tagName(self.current_token.type));
         if (prefix == null) {
-            // TODO: tag parser error
+            const err = try std.fmt.allocPrint(self.alloc.allocator(), "no prefix function found for token {s}", .{@tagName(self.current_token.type)});
+            self.parser_error = &err;
             return ParserError.fail;
         }
         left = try prefix.?(self);
