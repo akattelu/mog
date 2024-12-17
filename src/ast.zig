@@ -26,7 +26,6 @@ pub const Statement = union(StatementTypes) {
 
 pub const ReturnStatement = struct {
     token: token.Token,
-    // TODO: make this required
     expr: ?*Expression,
 
     pub fn tokenLiteral(self: *const ReturnStatement) []const u8 {
@@ -44,8 +43,7 @@ pub const ReturnStatement = struct {
 pub const LetStatement = struct {
     token: token.Token,
     name: *Identifier,
-    // TODO: make this required
-    expr: ?*Expression,
+    expr: *Expression,
     pub fn tokenLiteral(self: *const LetStatement) []const u8 {
         return self.token.literal;
     }
@@ -53,9 +51,7 @@ pub const LetStatement = struct {
         _ = try writer.writeAll("let ");
         try self.name.write(writer);
         _ = try writer.writeAll(" = ");
-        if (self.expr != null) {
-            try self.expr.?.write(writer);
-        }
+        try self.expr.write(writer);
     }
 };
 
