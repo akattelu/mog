@@ -158,7 +158,7 @@ pub const ConditionalExpression = struct {
             _ = try writer.writeAll(" else ");
             try self.else_block.?.write(writer);
         }
-        _ = try writer.writeAll("end");
+        _ = try writer.writeAll(" end");
     }
 };
 

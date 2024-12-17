@@ -51,6 +51,7 @@ pub const Parser = struct {
         .{ "bang", &parsePrefixExpression },
         .{ "minus", &parsePrefixExpression },
         .{ "t_if", &parseConditionalExpression },
+        .{ "lparen", &parseParenthesizedExpression },
     });
 
     pub fn init(allocator: std.mem.Allocator, lexer: *lex.Lexer) !Parser {
@@ -121,6 +122,20 @@ pub const Parser = struct {
     }
     fn peekPrecedence(self: *Parser) Precedence {
         return Precedence.ofToken(self.peek_token.*.type);
+    }
+
+    // parseBlock parses until it reaches an `else` or `end`
+    fn parseBlock(self: *Parser) !*ast.Block {
+        var block = try self.alloc.allocator().create(ast.Block);
+        var statements = std.ArrayList(*ast.Statement).init(self.alloc.allocator());
+        while (!self.currentTokenIs(.t_else) and !self.currentTokenIs(.end)) {
+            const stmt = try self.parseStatement();
+            try statements.append(stmt);
+            try self.nextToken();
+        }
+        block.statements = statements.items;
+
+        return block;
     }
 
     pub fn parseProgram(self: *Parser) !*ast.Program {
@@ -238,17 +253,28 @@ pub const Parser = struct {
         if (!self.expectAndPeek(.then)) {
             return ParserError.fail;
         }
-        cond_expr.then_block = try self.parseProgram();
-        if (self.peekTokenIs(.t_else)) {
+        try self.nextToken();
+        cond_expr.then_block = try self.parseBlock();
+        if (self.currentTokenIs(.t_else)) {
             try self.nextToken();
-            cond_expr.else_block = try self.parseProgram();
+            cond_expr.else_block = try self.parseBlock();
+            if (self.currentTokenIs(.t_else)) {
+                return ParserError.fail;
+            }
         } else {
             cond_expr.else_block = null;
         }
-        if (!self.expectAndPeek(.end)) {
+        expr.* = .{ .Conditional = cond_expr };
+        return expr;
+    }
+
+    fn parseParenthesizedExpression(self: *Parser) SuperError!*ast.Expression {
+        // drop references to the parens
+        try self.nextToken();
+        const expr = try self.parseExpression(.lowest);
+        if (!self.expectAndPeek(.rparen)) {
             return ParserError.fail;
         }
-        expr.* = .{ .Conditional = cond_expr };
         return expr;
     }
 
@@ -674,125 +700,120 @@ test "if expressions" {
     }
 }
 
-// test "if else expressions" {
-//     const input = "if (x < y) { x } else { y }";
-//
-//     const allocator = std.testing.allocator;
-//     const lexer = try lex.Lexer.init(allocator, input);
-//     var parser = try Parser.init(allocator, lexer);
-//     defer lexer.deinit();
-//     defer parser.deinit();
-//     const program = try parser.parseProgram();
-//     try assertNoErrors(&parser);
-//     try std.testing.expectEqual(@as(usize, 1), program.statements.len);
-//
-//     switch (program.statements[0].*) {
-//         .Expression => |e| {
-//             switch (e.expr.*) {
-//                 .Conditional => |cond| {
-//                     // Test condition (x < y)
-//                     switch (cond.condition.*) {
-//                         .Infix => |inf| {
-//                             try std.testing.expectEqualStrings("<", inf.operator);
-//                             switch (inf.left.*) {
-//                                 .Identifier => |left_id| {
-//                                     try std.testing.expectEqualStrings("x", left_id.value);
-//                                 },
-//                                 else => unreachable,
-//                             }
-//                             switch (inf.right.*) {
-//                                 .Identifier => |right_id| {
-//                                     try std.testing.expectEqualStrings("y", right_id.value);
-//                                 },
-//                                 else => unreachable,
-//                             }
-//                         },
-//                         else => unreachable,
-//                     }
-//
-//                     // Test consequence { x }
-//                     try std.testing.expectEqual(@as(usize, 1), cond.then_block.statements.len);
-//                     switch (cond.then_block.statements[0].*) {
-//                         .Expression => |cons_expr| {
-//                             switch (cons_expr.expr.*) {
-//                                 .Identifier => |id| {
-//                                     try std.testing.expectEqualStrings("x", id.value);
-//                                 },
-//                                 else => unreachable,
-//                             }
-//                         },
-//                         else => unreachable,
-//                     }
-//
-//                     // Test alternative { y }
-//                     try std.testing.expect(cond.else_block != null);
-//                     try std.testing.expectEqual(@as(usize, 1), cond.else_block.?.statements.len);
-//                     switch (cond.else_block.?.statements[0].*) {
-//                         .Expression => |alt_expr| {
-//                             switch (alt_expr.expr.*) {
-//                                 .Identifier => |id| {
-//                                     try std.testing.expectEqualStrings("y", id.value);
-//                                 },
-//                                 else => unreachable,
-//                             }
-//                         },
-//                         else => unreachable,
-//                     }
-//                 },
-//                 else => unreachable,
-//             }
-//         },
-//         else => unreachable,
-//     }
-// }
-//
-// test "if expression string representation" {
-//     const test_cases = .{
-//         .{
-//             .input = "if (x < y) { x }",
-//             .expected_string = "if (x < y) { x }",
-//         },
-//         .{
-//             .input = "if (x < y) { x } else { y }",
-//             .expected_string = "if (x < y) { x } else { y }",
-//         },
-//     };
-//
-//     const allocator = std.testing.allocator;
-//     inline for (test_cases) |tc| {
-//         const lexer = try lex.Lexer.init(allocator, tc.input);
-//         var parser = try Parser.init(allocator, lexer);
-//         defer lexer.deinit();
-//         defer parser.deinit();
-//         const program = try parser.parseProgram();
-//         try assertNoErrors(&parser);
-//
-//         var list = std.ArrayList(u8).init(allocator);
-//         defer list.deinit();
-//         try program.write(list.writer());
-//         try std.testing.expectEqualStrings(tc.expected_string, list.items);
-//     }
-// }
+test "if else expressions" {
+    const input = "if (x < y) then x else y end ";
 
-test "string writer" {
+    const allocator = std.testing.allocator;
+    const lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Conditional => |cond| {
+                    // Test condition (x < y)
+                    switch (cond.condition.*) {
+                        .Infix => |inf| {
+                            try std.testing.expectEqualStrings("<", inf.operator);
+                            switch (inf.left.*) {
+                                .Identifier => |left_id| {
+                                    try std.testing.expectEqualStrings("x", left_id.value);
+                                },
+                                else => unreachable,
+                            }
+                            switch (inf.right.*) {
+                                .Identifier => |right_id| {
+                                    try std.testing.expectEqualStrings("y", right_id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+
+                    // Test consequence { x }
+                    try std.testing.expectEqual(@as(usize, 1), cond.then_block.statements.len);
+                    switch (cond.then_block.statements[0].*) {
+                        .Expression => |cons_expr| {
+                            switch (cons_expr.expr.*) {
+                                .Identifier => |id| {
+                                    try std.testing.expectEqualStrings("x", id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+
+                    // Test alternative { y }
+                    try std.testing.expect(cond.else_block != null);
+                    try std.testing.expectEqual(@as(usize, 1), cond.else_block.?.statements.len);
+                    switch (cond.else_block.?.statements[0].*) {
+                        .Expression => |alt_expr| {
+                            switch (alt_expr.expr.*) {
+                                .Identifier => |id| {
+                                    try std.testing.expectEqualStrings("y", id.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "if expression string representation" {
     const test_cases = .{
         .{
-            .input = "let x=10;",
-            .expected_string = "let x = 10;",
+            .input = "if (x < y) then x end",
+            .expected_string = "if (x < y) then x; end;",
         },
         .{
-            .input = "myVar;",
-            .expected_string = "myVar;",
-        },
-        .{
-            .input = "42;",
-            .expected_string = "42;",
-        },
-        .{
-            .input = "return 3;",
-            .expected_string = "return 3;",
+            .input = "if (x < y) then x else y end",
+            .expected_string = "if (x < y) then x; else y; end;",
         },
     };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        const lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var list = std.ArrayList(u8).init(allocator);
+        defer list.deinit();
+        try program.write(list.writer());
+        try std.testing.expectEqualStrings(tc.expected_string, list.items);
+    }
+}
+
+test "string writer" {
+    const test_cases = .{ .{
+        .input = "let x=10;",
+        .expected_string = "let x = 10;",
+    }, .{
+        .input = "myVar;",
+        .expected_string = "myVar;",
+    }, .{
+        .input = "42;",
+        .expected_string = "42;",
+    }, .{
+        .input = "return 3;",
+        .expected_string = "return 3;",
+    }, .{ .input = "(3 + (3 + 3))", .expected_string = "(3 + (3 + 3));" } };
 
     const allocator = std.testing.allocator;
     inline for (test_cases) |tc| {
@@ -834,7 +855,8 @@ fn testReturnStatement(s: *ast.Statement, _: []const u8) !void {
 
 fn assertNoErrors(p: *Parser) !void {
     if (p.parser_error != null) {
-        std.debug.print("ERROR: {s}", .{p.parser_error.?.*});
+        var buf: [1024]u8 = undefined;
+        std.debug.print("ERROR: {s} with input: \"{s}\" at {s} \n", .{ p.parser_error.?.*, p.lexer.input, p.current_token.toString(&buf[0..]) });
     }
     try std.testing.expectEqual(p.parser_error, null);
 }
