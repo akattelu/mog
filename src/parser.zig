@@ -313,7 +313,7 @@ pub const Parser = struct {
 
     fn parseIntegerExpression(self: *Parser) !*ast.Expression {
         const expr = try self.alloc.allocator().create(ast.Expression);
-        const int = try self.alloc.allocator().create(ast.Integer);
+        const int = try self.alloc.allocator().create(ast.IntegerLiteral);
         int.value = try std.fmt.parseInt(i32, self.current_token.literal, 10);
         expr.* = .{ .Integer = int };
         return expr;
@@ -736,7 +736,7 @@ test "if else expressions" {
                         else => unreachable,
                     }
 
-                    // Test consequence { x }
+                    // Test consequence
                     try std.testing.expectEqual(@as(usize, 1), cond.then_block.statements.len);
                     switch (cond.then_block.statements[0].*) {
                         .Expression => |cons_expr| {
@@ -750,7 +750,7 @@ test "if else expressions" {
                         else => unreachable,
                     }
 
-                    // Test alternative { y }
+                    // Test alternative
                     try std.testing.expect(cond.else_block != null);
                     try std.testing.expectEqual(@as(usize, 1), cond.else_block.?.statements.len);
                     switch (cond.else_block.?.statements[0].*) {

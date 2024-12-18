@@ -66,13 +66,14 @@ pub const ExpressionStatement = struct {
     }
 };
 
-pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix, Conditional };
+pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix, Conditional, Boolean };
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
-    Integer: *Integer,
+    Integer: *IntegerLiteral,
     Prefix: *PrefixExpression,
     Infix: *InfixExpression,
     Conditional: *ConditionalExpression,
+    Boolean: *BooleanLiteral,
 
     pub fn tokenLiteral(self: *const Expression) []const u8 {
         return self.tokenLiteral();
@@ -82,6 +83,7 @@ pub const Expression = union(ExpressionTypes) {
         switch (self.*) {
             .Identifier => |n| try n.write(writer),
             .Integer => |n| try n.write(writer),
+            .Boolean => |n| try n.write(writer),
             .Prefix => |n| try n.write(writer),
             .Infix => |n| try n.write(writer),
             .Conditional => |n| try n.write(writer),
@@ -165,14 +167,31 @@ pub const ConditionalExpression = struct {
 // blocks are also collections of statements
 pub const Block = Program;
 
-pub const Integer = struct {
+pub const IntegerLiteral = struct {
     token: token.Token,
     value: i32,
-    pub fn tokenLiteral(self: *const Integer) []const u8 {
+    pub fn tokenLiteral(self: *const IntegerLiteral) []const u8 {
         return self.token.literal;
     }
-    pub fn write(self: *const Integer, writer: anytype) !void {
+    pub fn write(self: *const IntegerLiteral, writer: anytype) !void {
         try writer.print("{d}", .{self.value});
+    }
+};
+
+pub const BooleanLiteral = struct {
+    token: token.Token,
+    value: bool,
+
+    pub fn tokenLiteral(self: *const BooleanLiteral) []const u8 {
+        return self.token.literal;
+    }
+
+    pub fn write(self: *const BooleanLiteral, writer: anytype) !void {
+        if (self.value) {
+            try writer.print("{s}", .{self.value});
+        } else {
+            try writer.print("{s}", .{self.value});
+        }
     }
 };
 
