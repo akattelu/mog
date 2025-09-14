@@ -48,8 +48,9 @@ pub const Token = struct {
     start_pos: u32,
     end_pos: u32,
 
+    // FIXME: Convert this to using a Writer implementation?
     pub fn toString(self: *const Token, buf: *const []u8) []const u8 {
-        return std.fmt.bufPrint(buf.*, "{s}@{d}..{d}", .{ self.literal, self.start_pos, self.end_pos }) catch {
+        return std.fmt.bufPrint(buf.*, "{s}[{any}]@{d}..{d}", .{ self.literal, self.type, self.start_pos, self.end_pos }) catch {
             return self.literal;
         };
     }
