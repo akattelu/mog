@@ -33,6 +33,11 @@ pub fn main() !void {
     var stdin = File.stdin();
     var stdin_reader = stdin.reader(&input_buffer);
 
+    // Create stdout writer
+    var output_buffer: [32]u8 = undefined;
+    var stdout = File.stdout();
+    var stdout_writer = stdout.writer(&output_buffer);
+
     // Create an allocating writer
     //
     // This is required because we need to allocate dynamically
@@ -50,9 +55,9 @@ pub fn main() !void {
             defer lexer.deinit();
             var tok = try lexer.nextToken();
             while (tok.type != .eof) : (tok = try lexer.nextToken()) {
-                var buf: [256]u8 = undefined;
-                const str = tok.toString(&buf[0..]);
-                print("{s}\n", .{str});
+                try tok.write(&stdout_writer.interface);
+                try stdout_writer.interface.printAsciiChar('\n', .{});
+                try stdout_writer.interface.flush();
             }
         }
 
