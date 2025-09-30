@@ -51,7 +51,6 @@ pub const Token = struct {
     /// Write a string representation of the token to the specified writer
     pub fn write(self: *const Token, writer: *std.Io.Writer) std.Io.Writer.Error!void {
         try writer.print("{s}[{any}]@{d}..{d}", .{ self.literal, self.type, self.start_pos, self.end_pos });
-        try writer.flush();
     }
 };
 

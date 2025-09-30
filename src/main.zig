@@ -38,7 +38,6 @@ pub fn main() !void {
     var stdout_writer = stdout.writer(&output_buffer);
 
     // Create an allocating writer
-    //
     // This is required because we need to allocate dynamically
     // in order to read arbitrary amounts of text per line
     var allocating_writer = Writer.Allocating.init(std.heap.page_allocator);
