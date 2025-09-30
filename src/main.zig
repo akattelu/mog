@@ -44,9 +44,8 @@ pub fn main() !void {
     var allocating_writer = Writer.Allocating.init(std.heap.page_allocator);
 
     print(">> ", .{});
-    while (stdin_reader.interface.streamDelimiter(&allocating_writer.writer, '\n')) |bytesRead| {
+    while (stdin_reader.interface.streamDelimiter(&allocating_writer.writer, '\n')) |_| {
         const line = allocating_writer.written();
-        print("line contents: {s}, bytes read: {d}\n", .{ line, bytesRead });
 
         // Handle lexer mode
         if (std.mem.eql(u8, mode.?, "--lex")) {

@@ -1,0 +1,30 @@
+#!/bin/sh
+#
+# Pre-commit hook for Zig project
+# Runs formatting check, build, and tests before allowing commit
+
+echo "Running pre-commit checks..."
+
+# Run zig fmt check
+echo "1/3 Checking formatting..."
+if ! zig fmt --check .; then
+    echo "Error: Code formatting check failed. Run 'zig fmt .' to fix formatting."
+    exit 1
+fi
+
+# Run zig build
+echo "2/3 Building project..."
+if ! zig build; then
+    echo "Error: Build failed. Fix build errors before committing."
+    exit 1
+fi
+
+# Run zig build test
+echo "3/3 Running tests..."
+if ! zig build test; then
+    echo "Error: Tests failed. Fix failing tests before committing."
+    exit 1
+fi
+
+echo "All pre-commit checks passed!"
+exit 0

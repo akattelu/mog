@@ -1,4 +1,5 @@
 const std = @import("std");
+const os = @import("builtin").os.tag;
 
 // Although this function looks imperative, note that its job is to
 // declaratively construct a build graph that will be executed by an external
@@ -20,10 +21,6 @@ pub fn build(b: *std.Build) void {
     const exe = b.addExecutable(.{
         .name = "mog",
         .root_module = module,
-        // .root_source_file = b.path("src/main.zig"),
-        // .target = target,
-        // .optimize = optimize,
-
     });
 
     // This declares intent for the executable to be installed into the
@@ -79,4 +76,50 @@ pub fn build(b: *std.Build) void {
     // (make sure to rename 'exe_check')
     const check = b.step("check", "Check if foo compiles");
     check.dependOn(&exe_check.step);
+
+    // Create a new step for installing pre-commit hooks
+    // This step has no dependencies
+    const precommit_step = b.step("install-git-hooks", "Install git hooks");
+    precommit_step.makeFn = (copyGitHooks);
+}
+
+/// Build step that copies hooks from .githooks/ to .git/hooks
+fn copyGitHooks(_: *std.Build.Step, _: std.Build.Step.MakeOptions) !void {
+    const cwd = std.fs.cwd();
+
+    // Ensure .git/hooks directory exists
+    cwd.makePath(".git/hooks") catch |err| switch (err) {
+        error.PathAlreadyExists => {},
+        else => return err,
+    };
+
+    // Open source and destination directories
+    var githooks_dir = std.fs.cwd().openDir(".githooks", .{ .iterate = true }) catch |err| switch (err) {
+        error.FileNotFound => {
+            std.log.info("No .githooks directory found, skipping hook installation", .{});
+            return;
+        },
+        else => return err,
+    };
+    defer githooks_dir.close();
+
+    // Grab handle to hooks dir
+    var native_hooks_dir = try cwd.openDir(".git/hooks", .{});
+    defer native_hooks_dir.close();
+
+    // Iterate over source files
+    var iterator = githooks_dir.iterate();
+    while (try iterator.next()) |source_hook| {
+        // Copy hook from src to dest
+        try githooks_dir.copyFile(source_hook.name, native_hooks_dir, source_hook.name, .{});
+        std.log.info("Copied hook from .githooks/{s} to .git/hooks/{s}", .{ source_hook.name, source_hook.name });
+
+        // Open the file and make sure its executable on non-windows systems
+        if (os != .windows) {
+            var dest_file = try native_hooks_dir.openFile(source_hook.name, .{});
+            defer dest_file.close();
+            try dest_file.chmod(0o755);
+            std.log.info("Set permissions of .githooks/{s} to 755", .{source_hook.name});
+        }
+    }
 }
