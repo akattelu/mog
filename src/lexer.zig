@@ -9,6 +9,8 @@ fn isLetter(ch: u8) bool {
     return std.ascii.isAlphabetic(ch);
 }
 
+/// Allocates tokens from an input buffer string
+/// Initialize with .`init` function
 pub const Lexer = struct {
     alloc: std.heap.ArenaAllocator,
     input: []const u8,
@@ -18,16 +20,20 @@ pub const Lexer = struct {
 
     pub const LexError = error{Illegal};
 
-    pub fn init(allocator: std.mem.Allocator, input: []const u8) !*Lexer {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        var l = try arena.allocator().create(Lexer);
-        l.input = input;
-        l.position = 0;
-        l.read_position = 0;
-        l.ch = 0;
-        l.alloc = arena;
-        l.readChar();
-        return l;
+    /// Returns a Lexer struct value after initializing arena allocator
+    /// This method initializes the lexer with the correct internal state pointers to the string buffer
+    /// So, this function must be used to initialize the struct
+    pub fn init(allocator: std.mem.Allocator, input: []const u8) !Lexer {
+        const arena = std.heap.ArenaAllocator.init(allocator);
+        var lex: Lexer = .{
+            .input = input,
+            .position = 0,
+            .read_position = 0,
+            .ch = 0,
+            .alloc = arena,
+        };
+        lex.readChar();
+        return lex;
     }
 
     pub fn deinit(self: *Lexer) void {
@@ -96,10 +102,12 @@ pub const Lexer = struct {
         self.skipWhitespace();
         if (self.read_position > self.input.len) {
             const tok = try self.alloc.allocator().create(Token);
-            tok.literal = "";
-            tok.type = TokenType.eof;
-            tok.start_pos = self.position;
-            tok.end_pos = self.position;
+            tok.* = .{
+                .literal = "",
+                .type = TokenType.eof,
+                .start_pos = self.position,
+                .end_pos = self.position,
+            };
             return tok;
         }
 

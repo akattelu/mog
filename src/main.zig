@@ -6,7 +6,7 @@ const process = std.process;
 const StreamError = std.Io.Reader.StreamError;
 
 pub const ast = @import("ast.zig");
-pub const lex = @import("lexer.zig");
+pub const Lexer = @import("lexer.zig").Lexer;
 const Parser = @import("parser.zig").Parser;
 const ParserError = @import("parser.zig").Parser.ParserError;
 pub const token = @import("token.zig");
@@ -51,7 +51,7 @@ pub fn main() !void {
 
         // Handle lexer mode
         if (std.mem.eql(u8, mode.?, "--lex")) {
-            var lexer = try lex.Lexer.init(std.heap.page_allocator, line);
+            var lexer = try Lexer.init(std.heap.page_allocator, line);
             defer lexer.deinit();
             var tok = try lexer.nextToken();
             while (tok.type != .eof) : (tok = try lexer.nextToken()) {
