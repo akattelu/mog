@@ -12,7 +12,6 @@ const ParserError = @import("parser.zig").Parser.ParserError;
 pub const token = @import("token.zig");
 
 pub fn main() !void {
-
     // Read command line arguments and skip the first one
     var args = try process.argsWithAllocator(std.heap.page_allocator);
     _ = args.skip();

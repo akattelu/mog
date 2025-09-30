@@ -48,15 +48,25 @@ pub const Token = struct {
     start_pos: u32,
     end_pos: u32,
 
-    pub fn toString(self: *const Token, buf: *const []u8) []const u8 {
-        return std.fmt.bufPrint(buf.*, "{s}[{any}]@{d}..{d}", .{ self.literal, self.type, self.start_pos, self.end_pos }) catch {
-            return self.literal;
-        };
-    }
-
     /// Write a string representation of the token to the specified writer
     pub fn write(self: *const Token, writer: *std.Io.Writer) std.Io.Writer.Error!void {
-        try writer.print("{s}[{any}]@{d}..{}", .{ self.literal, self.type, self.start_pos, self.end_pos });
+        try writer.print("{s}[{any}]@{d}..{d}", .{ self.literal, self.type, self.start_pos, self.end_pos });
         try writer.flush();
     }
 };
+
+test "write" {
+    // Create testing allocator
+    const alloc = std.testing.allocator;
+
+    // Create allocating writer interface
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    // Write token
+    const tok = Token{ .type = .ident, .literal = "hello", .start_pos = 0, .end_pos = 5 };
+    try tok.write(&(writer.writer));
+
+    const actual = writer.written();
+    try std.testing.expectEqualStrings("hello[.ident]@0..5", actual);
+}
