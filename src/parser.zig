@@ -48,6 +48,8 @@ pub const Parser = struct {
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
         .{ "ident", &parseIdentifierExpression },
         .{ "int", &parseIntegerExpression },
+        .{ "true", &parseBooleanExpression },
+        .{ "false", &parseBooleanExpression },
         .{ "bang", &parsePrefixExpression },
         .{ "minus", &parsePrefixExpression },
         .{ "t_if", &parseConditionalExpression },
@@ -318,6 +320,22 @@ pub const Parser = struct {
         expr.* = .{ .Integer = int };
         return expr;
     }
+
+    /// Parse a boolean expression - errors if value is not true or false
+    fn parseBooleanExpression(self: *Parser) !*ast.Expression {
+        std.log.info("parsing boolean expression", .{});
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const boolean = try self.alloc.allocator().create(ast.BooleanLiteral);
+        if (std.mem.eql(u8, self.current_token.literal, "true")) {
+            boolean.value = true;
+        } else if (std.mem.eql(u8, self.current_token.literal, "false")) {
+            boolean.value = false;
+        } else {
+            return ParserError.fail;
+        }
+        expr.* = .{ .Boolean = boolean };
+        return expr;
+    }
 };
 
 test "create parser over string" {
@@ -456,6 +474,48 @@ test "integer expressions" {
     }
 }
 
+test "boolean expressions" {
+    const input =
+        \\true;
+        \\false;
+    ;
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 2), program.statements.len);
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Boolean => |b| {
+                    try std.testing.expectEqual(true, b.value);
+                },
+                else => {
+                    unreachable;
+                },
+            }
+        },
+        else => unreachable,
+    }
+
+    switch (program.statements[1].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Boolean => |b| {
+                    try std.testing.expectEqual(false, b.value);
+                },
+                else => {
+                    unreachable;
+                },
+            }
+        },
+        else => unreachable,
+    }
+}
 test "infix expressions" {
     const test_cases = .{
         .{
