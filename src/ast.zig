@@ -15,7 +15,7 @@ pub const Statement = union(StatementTypes) {
             .Expression => |n| return n.tokenLiteral(),
         }
     }
-    pub fn write(self: *const Statement, writer: Writer) !void {
+    pub fn write(self: *const Statement, writer: *Writer) !void {
         switch (self.*) {
             .Let => |n| try n.write(writer),
             .Return => |n| try n.write(writer),
@@ -33,7 +33,7 @@ pub const ReturnStatement = struct {
         return self.token.literal;
     }
 
-    pub fn write(self: *const ReturnStatement, writer: Writer) !void {
+    pub fn write(self: *const ReturnStatement, writer: *Writer) !void {
         _ = try writer.writeAll("return ");
         if (self.expr != null) {
             try self.expr.?.write(writer);
@@ -48,7 +48,7 @@ pub const LetStatement = struct {
     pub fn tokenLiteral(self: *const LetStatement) []const u8 {
         return self.token.literal;
     }
-    pub fn write(self: *const LetStatement, writer: Writer) !void {
+    pub fn write(self: *const LetStatement, writer: *Writer) !void {
         _ = try writer.writeAll("let ");
         try self.name.write(writer);
         _ = try writer.writeAll(" = ");
@@ -62,7 +62,7 @@ pub const ExpressionStatement = struct {
     pub fn tokenLiteral(self: *const ExpressionStatement) []const u8 {
         return self.expr.tokenLiteral();
     }
-    pub fn write(self: *const ExpressionStatement, writer: Writer) !void {
+    pub fn write(self: *const ExpressionStatement, writer: *Writer) !void {
         try self.expr.write(writer);
     }
 };
@@ -80,7 +80,7 @@ pub const Expression = union(ExpressionTypes) {
         return self.tokenLiteral();
     }
 
-    pub fn write(self: *const Expression, writer: Writer) !void {
+    pub fn write(self: *const Expression, writer: *Writer) Writer.Error!void {
         switch (self.*) {
             .Identifier => |n| try n.write(writer),
             .Integer => |n| try n.write(writer),
@@ -98,7 +98,7 @@ pub const Identifier = struct {
     pub fn tokenLiteral(self: *const Identifier) []const u8 {
         return self.token.literal;
     }
-    pub fn write(self: *const Identifier, writer: Writer) !void {
+    pub fn write(self: *const Identifier, writer: *Writer) !void {
         _ = try writer.writeAll(self.value);
     }
 };
@@ -113,7 +113,7 @@ pub const InfixExpression = struct {
         return self.token.literal;
     }
 
-    pub fn write(self: *InfixExpression, writer: Writer) (AllocatorError || std.fs.File.Writer.Error)!void {
+    pub fn write(self: *InfixExpression, writer: *Writer) !void {
         _ = try writer.writeAll("(");
         try self.left.write(writer);
         _ = try writer.writeAll(" ");
@@ -133,7 +133,7 @@ pub const PrefixExpression = struct {
         return self.token.literal;
     }
 
-    pub fn write(self: *PrefixExpression, writer: Writer) (AllocatorError || std.fs.File.Writer.Error)!void {
+    pub fn write(self: *PrefixExpression, writer: *Writer) !void {
         _ = try writer.writeAll("(");
         _ = try writer.writeAll(self.operator);
         _ = try writer.writeAll(" ");
@@ -152,7 +152,7 @@ pub const ConditionalExpression = struct {
         return self.token.literal;
     }
 
-    pub fn write(self: *ConditionalExpression, writer: Writer) (AllocatorError || std.fs.File.Writer.Error)!void {
+    pub fn write(self: *ConditionalExpression, writer: *Writer) !void {
         _ = try writer.writeAll("if ");
         try self.condition.write(writer);
         _ = try writer.writeAll(" then ");
@@ -174,7 +174,7 @@ pub const IntegerLiteral = struct {
     pub fn tokenLiteral(self: *const IntegerLiteral) []const u8 {
         return self.token.literal;
     }
-    pub fn write(self: *const IntegerLiteral, writer: Writer) !void {
+    pub fn write(self: *const IntegerLiteral, writer: *Writer) !void {
         try writer.print("{d}", .{self.value});
     }
 };
@@ -187,11 +187,11 @@ pub const BooleanLiteral = struct {
         return self.token.literal;
     }
 
-    pub fn write(self: *const BooleanLiteral, writer: Writer) !void {
+    pub fn write(self: *const BooleanLiteral, writer: *Writer) !void {
         if (self.value) {
-            try writer.print("{s}", .{self.value});
+            try writer.print("true", .{});
         } else {
-            try writer.print("{s}", .{self.value});
+            try writer.print("false", .{});
         }
     }
 };
@@ -206,7 +206,7 @@ pub const Program = struct {
             return "";
         }
     }
-    pub fn write(self: *const Program, writer: Writer) !void {
+    pub fn write(self: *const Program, writer: *Writer) !void {
         if (self.statements.len == 1) {
             try self.statements[0].write(writer);
         } else {

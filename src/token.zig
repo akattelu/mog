@@ -1,4 +1,5 @@
 const std = @import("std");
+const Writer = std.Io.Writer;
 pub const TokenType = enum {
     illegal,
     eof,
@@ -49,7 +50,7 @@ pub const Token = struct {
     end_pos: u32,
 
     /// Write a string representation of the token to the specified writer
-    pub fn write(self: *const Token, writer: *std.Io.Writer) std.Io.Writer.Error!void {
+    pub fn write(self: *const Token, writer: *Writer) std.Io.Writer.Error!void {
         try writer.print("{s}[{any}]@{d}..{d}", .{ self.literal, self.type, self.start_pos, self.end_pos });
     }
 };
@@ -59,7 +60,7 @@ test "write" {
     const alloc = std.testing.allocator;
 
     // Create allocating writer interface
-    var writer = std.Io.Writer.Allocating.init(alloc);
+    var writer = Writer.Allocating.init(alloc);
     defer writer.deinit();
 
     // Write token

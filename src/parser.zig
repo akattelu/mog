@@ -127,10 +127,10 @@ pub const Parser = struct {
     // parseBlock parses until it reaches an `else` or `end`
     fn parseBlock(self: *Parser) !*ast.Block {
         var block = try self.alloc.allocator().create(ast.Block);
-        var statements = std.ArrayList(*ast.Statement).init(self.alloc.allocator());
+        var statements = try std.ArrayList(*ast.Statement).initCapacity(self.alloc.allocator(), 8);
         while (!self.currentTokenIs(.t_else) and !self.currentTokenIs(.end)) {
             const stmt = try self.parseStatement();
-            try statements.append(stmt);
+            try statements.append(self.alloc.allocator(), stmt);
             try self.nextToken();
         }
         block.statements = statements.items;
@@ -140,10 +140,10 @@ pub const Parser = struct {
 
     pub fn parseProgram(self: *Parser) !*ast.Program {
         var program = try self.alloc.allocator().create(ast.Program);
-        var statements = std.ArrayList(*ast.Statement).init(self.alloc.allocator());
+        var statements = try std.ArrayList(*ast.Statement).initCapacity(self.alloc.allocator(), 64);
         while (self.current_token.type != .eof) {
             const stmt = try self.parseStatement();
-            try statements.append(stmt);
+            try statements.append(self.alloc.allocator(), stmt);
             try self.nextToken();
         }
         program.statements = statements.items;
@@ -326,7 +326,7 @@ test "create parser over string" {
     var lexer = try lex.Lexer.init(allocator, input);
     defer lexer.deinit();
 
-    var parser = try Parser.init(allocator, lexer);
+    var parser = try Parser.init(allocator, &lexer);
     defer parser.deinit();
     try std.testing.expectEqualStrings(parser.current_token.literal, "let");
     try std.testing.expectEqualStrings(parser.peek_token.literal, "x");
@@ -339,8 +339,8 @@ test "let statements" {
     ;
 
     const allocator = std.testing.allocator;
-    const lexer = try lex.Lexer.init(allocator, input);
-    var parser = try Parser.init(allocator, lexer);
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
     defer lexer.deinit();
     defer parser.deinit();
     const program = try parser.parseProgram();
@@ -369,8 +369,8 @@ test "statement errors" {
     const allocator = std.testing.allocator;
 
     inline for (test_cases) |test_case| {
-        const lexer = try lex.Lexer.init(allocator, test_case.input);
-        var parser = try Parser.init(allocator, lexer);
+        var lexer = try lex.Lexer.init(allocator, test_case.input);
+        var parser = try Parser.init(allocator, &lexer);
         defer lexer.deinit();
         defer parser.deinit();
         _ = parser.parseProgram() catch {
@@ -388,8 +388,8 @@ test "return statements" {
     ;
 
     const allocator = std.testing.allocator;
-    const lexer = try lex.Lexer.init(allocator, input);
-    var parser = try Parser.init(allocator, lexer);
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
     defer lexer.deinit();
     defer parser.deinit();
     const program = try parser.parseProgram();
@@ -406,8 +406,8 @@ test "identifier expressions" {
     ;
 
     const allocator = std.testing.allocator;
-    const lexer = try lex.Lexer.init(allocator, input);
-    var parser = try Parser.init(allocator, lexer);
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
     defer lexer.deinit();
     defer parser.deinit();
     const program = try parser.parseProgram();
@@ -434,8 +434,8 @@ test "integer expressions" {
     ;
 
     const allocator = std.testing.allocator;
-    const lexer = try lex.Lexer.init(allocator, input);
-    var parser = try Parser.init(allocator, lexer);
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
     defer lexer.deinit();
     defer parser.deinit();
     const program = try parser.parseProgram();
@@ -486,8 +486,8 @@ test "infix expressions" {
 
     const allocator = std.testing.allocator;
     inline for (test_cases) |tc| {
-        const lexer = try lex.Lexer.init(allocator, tc.input);
-        var parser = try Parser.init(allocator, lexer);
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
         defer lexer.deinit();
         defer parser.deinit();
         const program = try parser.parseProgram();
@@ -576,17 +576,18 @@ test "infix expressions: write" {
 
     const allocator = std.testing.allocator;
     inline for (test_cases) |tc| {
-        const lexer = try lex.Lexer.init(allocator, tc.input);
-        var parser = try Parser.init(allocator, lexer);
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
         defer lexer.deinit();
         defer parser.deinit();
         const program = try parser.parseProgram();
         try assertNoErrors(&parser);
 
-        var list = std.ArrayList(u8).init(allocator);
-        defer list.deinit();
-        try program.write(list.writer());
-        try std.testing.expectEqualStrings(tc.expected_string, list.items);
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+
+        try std.testing.expectEqualStrings(tc.expected_string, writer.written());
     }
 }
 
@@ -606,8 +607,8 @@ test "prefix expressions" {
 
     const allocator = std.testing.allocator;
     inline for (test_cases) |tc| {
-        const lexer = try lex.Lexer.init(allocator, tc.input);
-        var parser = try Parser.init(allocator, lexer);
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
         defer lexer.deinit();
         defer parser.deinit();
         const program = try parser.parseProgram();
@@ -638,8 +639,8 @@ test "if expressions" {
     const input = "if (x < y) then x end";
 
     const allocator = std.testing.allocator;
-    const lexer = try lex.Lexer.init(allocator, input);
-    var parser = try Parser.init(allocator, lexer);
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
     defer lexer.deinit();
     defer parser.deinit();
     const program = parser.parseProgram() catch |err| switch (err) {
@@ -704,8 +705,8 @@ test "if else expressions" {
     const input = "if (x < y) then x else y end ";
 
     const allocator = std.testing.allocator;
-    const lexer = try lex.Lexer.init(allocator, input);
-    var parser = try Parser.init(allocator, lexer);
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
     defer lexer.deinit();
     defer parser.deinit();
     const program = try parser.parseProgram();
@@ -786,17 +787,17 @@ test "if expression string representation" {
 
     const allocator = std.testing.allocator;
     inline for (test_cases) |tc| {
-        const lexer = try lex.Lexer.init(allocator, tc.input);
-        var parser = try Parser.init(allocator, lexer);
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
         defer lexer.deinit();
         defer parser.deinit();
         const program = try parser.parseProgram();
         try assertNoErrors(&parser);
 
-        var list = std.ArrayList(u8).init(allocator);
+        var list = std.Io.Writer.Allocating.init(allocator);
         defer list.deinit();
-        try program.write(list.writer());
-        try std.testing.expectEqualStrings(tc.expected_string, list.items);
+        try program.write(&list.writer);
+        try std.testing.expectEqualStrings(tc.expected_string, list.written());
     }
 }
 
@@ -817,16 +818,16 @@ test "string writer" {
 
     const allocator = std.testing.allocator;
     inline for (test_cases) |tc| {
-        const lexer = try lex.Lexer.init(allocator, tc.input);
-        var parser = try Parser.init(allocator, lexer);
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
         try assertNoErrors(&parser);
         defer lexer.deinit();
         defer parser.deinit();
         const program = try parser.parseProgram();
-        var list = std.ArrayList(u8).init(allocator);
+        var list = std.Io.Writer.Allocating.init(allocator);
         defer list.deinit();
-        try program.write(list.writer());
-        try std.testing.expectEqualStrings(tc.expected_string, list.items);
+        try program.write(&list.writer);
+        try std.testing.expectEqualStrings(tc.expected_string, list.written());
     }
 }
 
@@ -855,8 +856,8 @@ fn testReturnStatement(s: *ast.Statement, _: []const u8) !void {
 
 fn assertNoErrors(p: *Parser) !void {
     if (p.parser_error != null) {
-        var buf: [1024]u8 = undefined;
-        std.debug.print("ERROR: {s} with input: \"{s}\" at {s} \n", .{ p.parser_error.?.*, p.lexer.input, p.current_token.toString(&buf[0..]) });
+        // var buf: [1024]u8 = undefined;
+        std.debug.print("ERROR: {s} with input: \"{s}\" at {s} \n", .{ p.parser_error.?.*, p.lexer.input, p.current_token.literal });
     }
     try std.testing.expectEqual(p.parser_error, null);
 }

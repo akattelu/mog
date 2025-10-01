@@ -36,6 +36,7 @@ pub fn main() !void {
     var output_buffer: [32]u8 = undefined;
     var stdout = File.stdout();
     var stdout_writer = stdout.writer(&output_buffer);
+    const out_iface: *std.Io.Writer = &stdout_writer.interface;
 
     // Create an allocating writer
     // This is required because we need to allocate dynamically
@@ -52,10 +53,24 @@ pub fn main() !void {
             defer lexer.deinit();
             var tok = try lexer.nextToken();
             while (tok.type != .eof) : (tok = try lexer.nextToken()) {
-                try tok.write(&stdout_writer.interface);
-                try stdout_writer.interface.printAsciiChar('\n', .{});
-                try stdout_writer.interface.flush();
+                try tok.write(out_iface);
+                try out_iface.printAsciiChar('\n', .{});
+                try out_iface.flush();
             }
+        }
+
+        // Handle parse mode
+        if (std.mem.eql(u8, mode.?, "--parse")) {
+            var lexer = try Lexer.init(std.heap.page_allocator, line);
+            defer lexer.deinit();
+
+            var parser = try Parser.init(std.heap.page_allocator, &lexer);
+            defer parser.deinit();
+
+            const program = try parser.parseProgram();
+            try program.write(out_iface);
+            try out_iface.printAsciiChar('\n', .{});
+            try out_iface.flush();
         }
 
         // Clear writer so written() doesn't have previous iter content
@@ -77,41 +92,6 @@ pub fn main() !void {
         },
     }
 }
-
-// fn parser_repl(
-//     in: Reader,
-//     output: Writer,
-// ) !void {
-
-//     // repl
-//     var input: [1024]u8 = undefined;
-//     try output.print(">> ", .{});
-//     var read_value = try in.readUntilDelimiterOrEof(&input, '\n');
-
-//     while (read_value) |prog| {
-//         var lexer = try lex.Lexer.init(std.heap.page_allocator, prog);
-//         var parser = try Parser.init(std.heap.page_allocator, lexer);
-//         defer lexer.deinit();
-//         defer parser.deinit();
-//         const program = parser.parseProgram() catch |err| switch (err) {
-//             ParserError.fail => {
-//                 try output.print("ERROR: {s}\n", .{parser.parser_error.?.*});
-//                 try output.print(">> ", .{});
-//                 read_value = try in.readUntilDelimiterOrEof(&input, '\n');
-//                 continue;
-//             },
-//             else => {
-//                 return err;
-//             },
-//         };
-
-//         try program.write(output);
-//         _ = try output.write("\n");
-
-//         try output.print(">> ", .{});
-//         read_value = try in.readUntilDelimiterOrEof(&input, '\n');
-//     }
-// }
 
 test {
     std.testing.refAllDecls(@This());
