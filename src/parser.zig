@@ -326,6 +326,7 @@ pub const Parser = struct {
         std.log.info("parsing boolean expression", .{});
         const expr = try self.alloc.allocator().create(ast.Expression);
         const boolean = try self.alloc.allocator().create(ast.BooleanLiteral);
+        boolean.token = self.current_token.*;
         if (std.mem.eql(u8, self.current_token.literal, "true")) {
             boolean.value = true;
         } else if (std.mem.eql(u8, self.current_token.literal, "false")) {
@@ -493,6 +494,7 @@ test "boolean expressions" {
             switch (e.expr.*) {
                 .Boolean => |b| {
                     try std.testing.expectEqual(true, b.value);
+                    try std.testing.expectEqualStrings("true", e.expr.tokenLiteral());
                 },
                 else => {
                     unreachable;
@@ -507,6 +509,7 @@ test "boolean expressions" {
             switch (e.expr.*) {
                 .Boolean => |b| {
                     try std.testing.expectEqual(false, b.value);
+                    try std.testing.expectEqualStrings("false", e.expr.tokenLiteral());
                 },
                 else => {
                     unreachable;

@@ -77,7 +77,14 @@ pub const Expression = union(ExpressionTypes) {
     Boolean: *BooleanLiteral,
 
     pub fn tokenLiteral(self: *const Expression) []const u8 {
-        return self.tokenLiteral();
+        return switch (self.*) {
+            .Identifier => |n| n.tokenLiteral(),
+            .Integer => |n| n.tokenLiteral(),
+            .Boolean => |n| n.tokenLiteral(),
+            .Prefix => |n| n.tokenLiteral(),
+            .Infix => |n| n.tokenLiteral(),
+            .Conditional => |n| n.tokenLiteral(),
+        };
     }
 
     pub fn write(self: *const Expression, writer: *Writer) Writer.Error!void {
@@ -148,7 +155,7 @@ pub const ConditionalExpression = struct {
     then_block: *Block,
     else_block: ?*Block,
 
-    pub fn tokenLiteral(self: *const PrefixExpression) []const u8 {
+    pub fn tokenLiteral(self: *const ConditionalExpression) []const u8 {
         return self.token.literal;
     }
 
