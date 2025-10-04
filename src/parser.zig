@@ -6,6 +6,7 @@ const TokenType = token.TokenType;
 const AllocError = std.mem.Allocator.Error;
 const LexError = lex.Lexer.LexError;
 
+/// Parser struct that handles recursive descent pratt parsing of moglang
 pub const Parser = struct {
     lexer: *lex.Lexer,
     current_token: *token.Token,
@@ -13,6 +14,7 @@ pub const Parser = struct {
     parser_error: ?*const []u8,
     alloc: std.heap.ArenaAllocator,
 
+    // Parser error
     pub const ParserError = error{fail};
     const SuperError = (LexError || ParserError || AllocError || std.fmt.ParseIntError);
     const PrefixParseFn = *const fn (*Parser) SuperError!*ast.Expression;
@@ -131,11 +133,14 @@ pub const Parser = struct {
         return parser;
     }
 
+    /// Deinits the parser
+    /// Frees all AST nodes allocated by the parser
     pub fn deinit(self: *Parser) void {
         self.alloc.deinit();
     }
 
-    pub fn nextToken(self: *Parser) !void {
+    /// Read another token
+    fn nextToken(self: *Parser) !void {
         self.current_token = self.peek_token;
         const new_token = try self.alloc.allocator().create(token.Token);
         new_token.* = (try self.lexer.nextToken()).*;
@@ -195,6 +200,8 @@ pub const Parser = struct {
         return block;
     }
 
+    /// Parses a mog program, which is a collection of statements
+    /// Recursively descends to return a Program AST node
     pub fn parseProgram(self: *Parser) !*ast.Program {
         var program = try self.alloc.allocator().create(ast.Program);
         var statements = try std.ArrayList(*ast.Statement).initCapacity(self.alloc.allocator(), 64);
