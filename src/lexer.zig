@@ -2,6 +2,7 @@ const std = @import("std");
 const token = @import("token.zig");
 const TokenType = token.TokenType;
 const Token = token.Token;
+
 fn isDigit(ch: u8) bool {
     return std.ascii.isDigit(ch);
 }
@@ -36,6 +37,7 @@ pub const Lexer = struct {
         return lex;
     }
 
+    /// Deallocates all tokens created by the lexer
     pub fn deinit(self: *Lexer) void {
         self.alloc.deinit();
     }

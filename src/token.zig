@@ -91,6 +91,7 @@ pub const TokenType = enum {
         .{ "nil", .nil },
     });
 
+    /// Returns a matching TokenType from a string literal
     pub fn fromWord(lit: []const u8) TokenType {
         return KeywordMap.get(lit) orelse .ident;
     }

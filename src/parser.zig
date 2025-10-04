@@ -19,16 +19,47 @@ pub const Parser = struct {
     const InfixParseFn = *const fn (*Parser, *ast.Expression) SuperError!*ast.Expression;
 
     // Precedence defines precedence for Pratt parsing infix operators
+    // Ordered from lowest to highest precedence (matching Lua 5.4 spec)
     const Precedence = enum(u8) {
         lowest,
-        equals,
-        lessgreater,
-        sum,
-        product,
-        prefix,
-        call,
+        logical_or, // or
+        logical_and, // and
+        comparison, // <, >, <=, >=, ~=, ==
+        bitwise_or, // |
+        bitwise_xor, // ~
+        bitwise_and, // &
+        bitwise_shift, // <<, >>
+        concat, // .. (right-associative)
+        sum, // +, -
+        product, // *, /, //, %
+        unary, // not, #, -, ~ (unary)
+        exponent, // ^ (right-associative)
+        call, // function calls
 
-        const TokenPrecedenceMap = std.StaticStringMap(Precedence).initComptime(.{ .{ "eq", Precedence.equals }, .{ "neq", Precedence.equals }, .{ "lt", Precedence.lessgreater }, .{ "gt", Precedence.lessgreater }, .{ "plus", Precedence.sum }, .{ "minus", Precedence.sum }, .{ "slash", Precedence.product }, .{ "asterisk", Precedence.product }, .{ "lparen", Precedence.call } });
+        const TokenPrecedenceMap = std.StaticStringMap(Precedence).initComptime(.{
+            .{ "t_or", Precedence.logical_or },
+            .{ "t_and", Precedence.logical_and },
+            .{ "eq", Precedence.comparison },
+            .{ "neq", Precedence.comparison },
+            .{ "lt", Precedence.comparison },
+            .{ "gt", Precedence.comparison },
+            .{ "lte", Precedence.comparison },
+            .{ "gte", Precedence.comparison },
+            .{ "pipe", Precedence.bitwise_or },
+            .{ "tilde", Precedence.bitwise_xor },
+            .{ "ampersand", Precedence.bitwise_and },
+            .{ "lshift", Precedence.bitwise_shift },
+            .{ "rshift", Precedence.bitwise_shift },
+            .{ "dotdot", Precedence.concat },
+            .{ "plus", Precedence.sum },
+            .{ "minus", Precedence.sum },
+            .{ "asterisk", Precedence.product },
+            .{ "slash", Precedence.product },
+            .{ "doubleslash", Precedence.product },
+            .{ "percent", Precedence.product },
+            .{ "caret", Precedence.exponent },
+            .{ "lparen", Precedence.call },
+        });
 
         fn ofToken(t: TokenType) Precedence {
             return TokenPrecedenceMap.get(@tagName(t)) orelse Precedence.lowest;
@@ -36,35 +67,58 @@ pub const Parser = struct {
     };
 
     const InfixMap = std.StaticStringMap(InfixParseFn).initComptime(.{
+        // Arithmetic operators
         .{ "plus", &parseInfixExpression },
         .{ "minus", &parseInfixExpression },
-        .{ "slash", &parseInfixExpression },
         .{ "asterisk", &parseInfixExpression },
+        .{ "slash", &parseInfixExpression },
+        .{ "doubleslash", &parseInfixExpression },
+        .{ "percent", &parseInfixExpression },
+        .{ "caret", &parseInfixExpression },
+        // Comparison operators
         .{ "eq", &parseInfixExpression },
         .{ "neq", &parseInfixExpression },
         .{ "lt", &parseInfixExpression },
         .{ "gt", &parseInfixExpression },
+        .{ "lte", &parseInfixExpression },
+        .{ "gte", &parseInfixExpression },
+        // Logical operators
+        .{ "t_and", &parseInfixExpression },
+        .{ "t_or", &parseInfixExpression },
+        // Bitwise operators
+        .{ "ampersand", &parseInfixExpression },
+        .{ "pipe", &parseInfixExpression },
+        .{ "tilde", &parseInfixExpression },
+        .{ "lshift", &parseInfixExpression },
+        .{ "rshift", &parseInfixExpression },
+        // String concatenation
+        .{ "dotdot", &parseInfixExpression },
     });
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
+        // Literals
         .{ "ident", &parseIdentifierExpression },
         .{ "int", &parseIntegerExpression },
         .{ "true", &parseBooleanExpression },
         .{ "false", &parseBooleanExpression },
+        // Unary operators
         .{ "not", &parsePrefixExpression },
         .{ "minus", &parsePrefixExpression },
+        .{ "hash", &parsePrefixExpression },
+        .{ "tilde", &parsePrefixExpression },
+        // Control flow
         .{ "t_if", &parseConditionalExpression },
+        // Grouping
         .{ "lparen", &parseParenthesizedExpression },
     });
 
+    /// Initialize the Parser
+    /// This creates an arena allocator to create AST nodes
     pub fn init(allocator: std.mem.Allocator, lexer: *lex.Lexer) !Parser {
-        var alloc = std.heap.ArenaAllocator.init(allocator);
-        const arena = alloc.allocator();
+        const alloc = std.heap.ArenaAllocator.init(allocator);
 
-        // Create tokens using the arena allocator
-        const first = try arena.create(token.Token);
-        first.* = (try lexer.nextToken()).*;
-        const second = try arena.create(token.Token);
-        second.* = (try lexer.nextToken()).*;
+        // Read first two tokens to initialize stat
+        const first = (try lexer.nextToken());
+        const second = (try lexer.nextToken());
 
         const parser = Parser{
             .lexer = lexer,
@@ -238,7 +292,17 @@ pub const Parser = struct {
         infix_expr.left = left;
         const prec = (self.currentPrecedence());
         try self.nextToken();
-        infix_expr.right = try self.parseExpression(prec);
+
+        // Right-associative operators: ^, ..
+        // For right-associativity, we parse the right side with one less precedence
+        const is_right_assoc = std.mem.eql(u8, infix_expr.operator, "^") or
+            std.mem.eql(u8, infix_expr.operator, "..");
+        const right_prec = if (is_right_assoc)
+            @as(Precedence, @enumFromInt(@intFromEnum(prec) - 1))
+        else
+            prec;
+
+        infix_expr.right = try self.parseExpression(right_prec);
 
         expr.* = .{ .Infix = infix_expr };
         return expr;
@@ -912,6 +976,7 @@ fn testReturnStatement(s: *ast.Statement, _: []const u8) !void {
     switch (s.*) {
         .Return => {
             // TODO: test the expression
+            try std.testing.expect(true);
         },
         else => unreachable,
     }
@@ -923,4 +988,176 @@ fn assertNoErrors(p: *Parser) !void {
         std.debug.print("ERROR: {s} with input: \"{s}\" at {s} \n", .{ p.parser_error.?.*, p.lexer.input, p.current_token.literal });
     }
     try std.testing.expectEqual(p.parser_error, null);
+}
+
+test "bitwise operators" {
+    const test_cases = .{
+        .{ .input = "5 & 3;", .expected = "(5 & 3);" },
+        .{ .input = "5 | 3;", .expected = "(5 | 3);" },
+        .{ .input = "5 ~ 3;", .expected = "(5 ~ 3);" },
+        .{ .input = "5 << 2;", .expected = "(5 << 2);" },
+        .{ .input = "16 >> 2;", .expected = "(16 >> 2);" },
+        // Precedence: & > ~ > |
+        .{ .input = "1 | 2 ~ 3 & 4;", .expected = "(1 | (2 ~ (3 & 4)));" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "new arithmetic operators" {
+    const test_cases = .{
+        .{ .input = "10 % 3;", .expected = "(10 % 3);" },
+        .{ .input = "10 // 3;", .expected = "(10 // 3);" },
+        .{ .input = "2 ^ 3;", .expected = "(2 ^ 3);" },
+        // Exponentiation is right-associative and highest precedence
+        .{ .input = "2 ^ 3 ^ 2;", .expected = "(2 ^ (3 ^ 2));" },
+        .{ .input = "2 + 3 ^ 2;", .expected = "(2 + (3 ^ 2));" },
+        .{ .input = "2 * 3 % 4;", .expected = "((2 * 3) % 4);" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "string concatenation (using identifiers)" {
+    const test_cases = .{
+        .{ .input = "a .. b;", .expected = "(a .. b);" },
+        // Concatenation is right-associative
+        .{ .input = "a .. b .. c;", .expected = "(a .. (b .. c));" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "logical operators" {
+    const test_cases = .{
+        .{ .input = "true and false;", .expected = "(true and false);" },
+        .{ .input = "true or false;", .expected = "(true or false);" },
+        // or has lower precedence than and
+        .{ .input = "true or false and false;", .expected = "(true or (false and false));" },
+        .{ .input = "1 < 2 and 3 > 2;", .expected = "((1 < 2) and (3 > 2));" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "prefix operators" {
+    const test_cases = .{
+        .{ .input = "#mytable;", .expected = "(#mytable);" },
+        .{ .input = "~5;", .expected = "(~5);" },
+        .{ .input = "#(x + y);", .expected = "(#(x + y));" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "comparison operators" {
+    const test_cases = .{
+        .{ .input = "5 <= 10;", .expected = "(5 <= 10);" },
+        .{ .input = "10 >= 5;", .expected = "(10 >= 5);" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "complex operator precedence" {
+    const test_cases = .{
+        // Exponent > unary > product > sum > shift > bitwise_and > bitwise_xor > bitwise_or > comparison > and > or
+        .{ .input = "1 + 2 * 3 ^ 4;", .expected = "(1 + (2 * (3 ^ 4)));" },
+        .{ .input = "a or b and c < d;", .expected = "(a or (b and (c < d)));" },
+        .{ .input = "x << 2 + 3;", .expected = "(x << (2 + 3));" },
+        .{ .input = "-2 ^ 2;", .expected = "(-(2 ^ 2));" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
 }

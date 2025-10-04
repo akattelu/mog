@@ -143,7 +143,10 @@ pub const PrefixExpression = struct {
     pub fn write(self: *PrefixExpression, writer: *Writer) !void {
         _ = try writer.writeAll("(");
         _ = try writer.writeAll(self.operator);
-        _ = try writer.writeAll(" ");
+        // Only add space for word operators (not, and, or)
+        if (std.mem.eql(u8, self.operator, "not")) {
+            _ = try writer.writeAll(" ");
+        }
         try self.expression.write(writer);
         _ = try writer.writeAll(")");
     }
