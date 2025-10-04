@@ -63,6 +63,7 @@ pub const TokenType = enum {
     rshift,
     dot,
     doublecolon,
+    doublehyphen,
 
     const KeywordMap = std.StaticStringMap(TokenType).initComptime(.{
         .{ "function", .function },
