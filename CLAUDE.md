@@ -9,9 +9,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Language Grammar
 
 The language grammar is defined in AGENTS.md and follows Lua's BNF grammar with adaptations for type annotations. Key syntax includes:
-- Statements: `let`, `return`, `if-then-else-end`, function definitions
+- Statements: `local`, `return`, `if-then-else-end`, function definitions
 - Expressions: literals (integers, booleans, strings), infix/prefix operations, conditionals
-- Type annotations: `let name: type = value`
+- Type annotations: `local name: type = value`
 
 ## Build Commands
 
@@ -45,7 +45,7 @@ zig build install-git-hooks
    - Supports strings, identifiers, integers, keywords, operators
 
 2. **Token** (`src/token.zig`): Token types and definitions
-   - Keyword map for reserved words (`function`, `let`, `if`, `else`, `return`, etc.)
+   - Keyword map for reserved words (`function`, `local`, `if`, `else`, `return`, `not`, `and`, `or`, `nil`, etc.)
    - Static string maps for efficient keyword lookup
 
 3. **Parser** (`src/parser.zig`): Pratt parser for expression parsing
