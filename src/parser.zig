@@ -50,7 +50,7 @@ pub const Parser = struct {
         .{ "int", &parseIntegerExpression },
         .{ "true", &parseBooleanExpression },
         .{ "false", &parseBooleanExpression },
-        .{ "bang", &parsePrefixExpression },
+        .{ "not", &parsePrefixExpression },
         .{ "minus", &parsePrefixExpression },
         .{ "t_if", &parseConditionalExpression },
         .{ "lparen", &parseParenthesizedExpression },
@@ -156,7 +156,7 @@ pub const Parser = struct {
     fn parseStatement(self: *Parser) !*ast.Statement {
         const stmt = try self.alloc.allocator().create(ast.Statement);
         switch (self.current_token.type) {
-            .let => {
+            .local => {
                 stmt.* = .{ .Let = try self.parseLetStatement() };
             },
             .t_return => {
@@ -340,21 +340,21 @@ pub const Parser = struct {
 };
 
 test "create parser over string" {
-    const input = "let x = 3";
+    const input = "local x = 3";
     const allocator = std.testing.allocator;
     var lexer = try lex.Lexer.init(allocator, input);
     defer lexer.deinit();
 
     var parser = try Parser.init(allocator, &lexer);
     defer parser.deinit();
-    try std.testing.expectEqualStrings(parser.current_token.literal, "let");
+    try std.testing.expectEqualStrings(parser.current_token.literal, "local");
     try std.testing.expectEqualStrings(parser.peek_token.literal, "x");
 }
 
-test "let statements" {
+test "local statements" {
     const input =
-        \\let x = 3;
-        \\let foo = 400;
+        \\local x = 3;
+        \\local foo = 400;
     ;
 
     const allocator = std.testing.allocator;
@@ -372,15 +372,15 @@ test "let statements" {
 test "statement errors" {
     const test_cases = .{
         .{
-            .input = "let = 10;",
+            .input = "local = 10;",
             .expected_error = "expected next token to be ident, got assign instead",
         },
         .{
-            .input = "let x 10;",
+            .input = "local x 10;",
             .expected_error = "expected next token to be assign, got int instead",
         },
         .{
-            .input = "let x 10;",
+            .input = "local x 10;",
             .expected_error = "expected next token to be assign, got int instead",
         },
     };
@@ -614,8 +614,8 @@ test "infix expressions: write" {
             .expected_string = "(5 == 3);",
         },
         .{
-            .input = "5 != 3;",
-            .expected_string = "(5 != 3);",
+            .input = "5 ~= 3;",
+            .expected_string = "(5 ~= 3);",
         },
         // Test operator precedence
         .{
@@ -662,8 +662,8 @@ test "prefix expressions" {
             .value = 15,
         },
         .{
-            .input = "!5;",
-            .operator = "!",
+            .input = "not 5;",
+            .operator = "not",
             .value = 5,
         },
     };
@@ -866,8 +866,8 @@ test "if expression string representation" {
 
 test "string writer" {
     const test_cases = .{ .{
-        .input = "let x=10;",
-        .expected_string = "let x = 10;",
+        .input = "local x=10;",
+        .expected_string = "local x = 10;",
     }, .{
         .input = "myVar;",
         .expected_string = "myVar;",
@@ -895,7 +895,7 @@ test "string writer" {
 }
 
 fn testLetStatement(s: *ast.Statement, name: []const u8) !void {
-    try std.testing.expectEqualStrings("let", s.tokenLiteral());
+    try std.testing.expectEqualStrings("local", s.tokenLiteral());
 
     switch (s.*) {
         .Let => |ls| {

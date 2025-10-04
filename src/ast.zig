@@ -49,7 +49,7 @@ pub const LetStatement = struct {
         return self.token.literal;
     }
     pub fn write(self: *const LetStatement, writer: *Writer) !void {
-        _ = try writer.writeAll("let ");
+        _ = try writer.writeAll("local ");
         try self.name.write(writer);
         _ = try writer.writeAll(" = ");
         try self.expr.write(writer);
