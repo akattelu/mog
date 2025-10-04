@@ -103,7 +103,7 @@ pub const ExpressionStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix, Conditional, Boolean };
+pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix, Conditional, Boolean, Nil };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
@@ -114,6 +114,7 @@ pub const Expression = union(ExpressionTypes) {
     Infix: *InfixExpression,
     Conditional: *ConditionalExpression,
     Boolean: *BooleanLiteral,
+    Nil: *Nil,
 
     /// Returns the literal text of the first token in this expression.
     /// Useful for debugging and error messages.
@@ -125,6 +126,7 @@ pub const Expression = union(ExpressionTypes) {
             .Prefix => |n| n.tokenLiteral(),
             .Infix => |n| n.tokenLiteral(),
             .Conditional => |n| n.tokenLiteral(),
+            .Nil => |n| n.tokenLiteral(),
         };
     }
 
@@ -138,6 +140,7 @@ pub const Expression = union(ExpressionTypes) {
             .Prefix => |n| try n.write(writer),
             .Infix => |n| try n.write(writer),
             .Conditional => |n| try n.write(writer),
+            .Nil => |n| try n.write(writer),
         }
     }
 };
@@ -296,6 +299,22 @@ pub const BooleanLiteral = struct {
         } else {
             try writer.print("false", .{});
         }
+    }
+};
+
+/// Represents the nil literal
+pub const Nil = struct {
+    /// The nil token
+    token: token.Token,
+
+    /// Returns the literal text of the integer token.
+    pub fn tokenLiteral(self: *const Nil) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the integer value to the given writer in decimal format.
+    pub fn write(_: *const Nil, writer: *Writer) !void {
+        try writer.print("nil", .{});
     }
 };
 

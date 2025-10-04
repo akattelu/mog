@@ -100,6 +100,7 @@ pub const Parser = struct {
         .{ "int", &parseIntegerExpression },
         .{ "true", &parseBooleanExpression },
         .{ "false", &parseBooleanExpression },
+        .{ "nil", &parseNilExpression },
         // Unary operators
         .{ "not", &parsePrefixExpression },
         .{ "minus", &parsePrefixExpression },
@@ -385,6 +386,14 @@ pub const Parser = struct {
         return expr;
     }
 
+    fn parseNilExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const nil = try self.alloc.allocator().create(ast.Nil);
+        nil.token = self.current_token.*;
+        expr.* = .{ .Nil = nil };
+        return expr;
+    }
+
     /// Parse a boolean expression - errors if value is not true or false
     fn parseBooleanExpression(self: *Parser) !*ast.Expression {
         std.log.info("parsing boolean expression", .{});
@@ -583,6 +592,33 @@ test "boolean expressions" {
         else => unreachable,
     }
 }
+
+test "nil expression" {
+    const input = "nil";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Nil => {
+                    try std.testing.expectEqualStrings("nil", e.expr.tokenLiteral());
+                },
+                else => {
+                    unreachable;
+                },
+            }
+        },
+        else => unreachable,
+    }
+}
+
 test "infix expressions" {
     const test_cases = .{
         .{
