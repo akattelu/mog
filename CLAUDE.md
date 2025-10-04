@@ -92,6 +92,7 @@ Run individual module tests by examining test blocks in each file.
 - Error messages include token position information for debugging
 - The `Block` type is aliased to `Program` (both are statement collections)
 - Boolean literal parsing includes logging (see `parseBooleanExpression` in parser.zig:326)
+- In zig 0.15 there are new interfaces for std.Io.Writer and std.Io.Reader (note the capital Io instead of lowercase io). Use tools to understand the new interface when you want to use or revise these interfaces.
 
 ## Zig Documentation
 
