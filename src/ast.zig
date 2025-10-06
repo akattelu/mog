@@ -2,6 +2,7 @@ const std = @import("std");
 const token = @import("token.zig");
 const Writer = std.Io.Writer;
 const AllocatorError = std.mem.Allocator.Error;
+const testing = std.testing;
 
 /// The different types of statements in the AST.
 pub const StatementTypes = enum { Let, Return, Expression };
@@ -83,6 +84,61 @@ pub const LetStatement = struct {
         try self.name.write(writer);
         _ = try writer.writeAll(" = ");
         try self.expr.write(writer);
+    }
+};
+
+// Represents one or more identifiers
+// Used in assignment statements where there are multiple left hand side variables
+pub const NameList = struct {
+    // The token pointing to the first identifier
+    token: token.Token,
+
+    /// List of names on LHS
+    names: std.ArrayList(*Identifier),
+
+    /// Allocator used for adding more elements and printing
+    allocator: std.mem.Allocator,
+
+    /// Create a NameList with one identifier
+    /// Caller must call deinit() to free memory
+    pub fn init(allocator: std.mem.Allocator, name: *Identifier) !NameList {
+        var names = try std.ArrayList(*Identifier).initCapacity(allocator, 3);
+        try names.append(allocator, name);
+        return .{ .token = name.token, .names = names, .allocator = allocator };
+    }
+
+    /// Add a new identifier to the NameList
+    pub fn add(self: *NameList, name: *Identifier) !void {
+        try self.names.append(self.allocator, name);
+    }
+
+    /// Clear memory in the NameList
+    pub fn deinit(self: *NameList) void {
+        self.names.deinit(self.allocator);
+    }
+
+    /// Returns the literal token text for the first name
+    pub fn tokenLiteral(self: *const NameList) []const u8 {
+        if (self.names.items.len > 0) {
+            return self.names.items[0].value;
+        }
+        return "";
+    }
+
+    // Writes comma separated name list to writer
+    pub fn write(self: *const NameList, writer: *Writer) !void {
+        if (self.names.items.len <= 1) {
+            try self.names.items[0].write(writer);
+            return;
+        }
+
+        var i: usize = 0;
+        while (i < self.names.items.len - 1) : (i += 1) {
+            try self.names.items[i].write(writer);
+            try writer.writeAll(", ");
+        }
+        try self.names.items[i].write(writer);
+        return;
     }
 };
 
@@ -400,3 +456,39 @@ pub const Program = struct {
         }
     }
 };
+
+test "NameList Writer" {
+    const alloc = testing.allocator;
+
+    // Make 3 names
+    const name1 = try testing.allocator.create(Identifier);
+    defer testing.allocator.destroy(name1);
+    name1.* = .{ .token = token.Token{ .type = .ident, .literal = "hello", .start_pos = 0, .end_pos = 5 }, .value = "hello" };
+
+    const name2 = try testing.allocator.create(Identifier);
+    defer testing.allocator.destroy(name2);
+    name2.* = .{ .token = token.Token{ .type = .ident, .literal = "world", .start_pos = 0, .end_pos = 5 }, .value = "world" };
+
+    const name3 = try testing.allocator.create(Identifier);
+    defer testing.allocator.destroy(name3);
+    name3.* = .{ .token = token.Token{ .type = .ident, .literal = "again", .start_pos = 0, .end_pos = 5 }, .value = "again" };
+
+    // Initialize writer
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    // Test single name
+    var nl = try NameList.init(alloc, name1);
+    defer nl.deinit();
+
+    try nl.write(&writer.writer);
+    try testing.expectEqualStrings("hello", writer.written());
+    writer.clearRetainingCapacity();
+
+    // Test 3 names
+    try nl.add(name2);
+    try nl.add(name3);
+
+    try nl.write(&writer.writer);
+    try testing.expectEqualStrings("hello, world, again", writer.written());
+}
