@@ -106,7 +106,7 @@ pub const ExpressionStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil };
+pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
@@ -119,6 +119,7 @@ pub const Expression = union(ExpressionTypes) {
     Conditional: *ConditionalExpression,
     Boolean: *BooleanLiteral,
     Nil: *Nil,
+    Varargs: *Varargs,
 
     /// Returns the literal text of the first token in this expression.
     /// Useful for debugging and error messages.
@@ -132,6 +133,7 @@ pub const Expression = union(ExpressionTypes) {
             .Infix => |n| n.tokenLiteral(),
             .Conditional => |n| n.tokenLiteral(),
             .Nil => |n| n.tokenLiteral(),
+            .Varargs => |n| n.tokenLiteral(),
         };
     }
 
@@ -147,6 +149,7 @@ pub const Expression = union(ExpressionTypes) {
             .Infix => |n| try n.write(writer),
             .Conditional => |n| try n.write(writer),
             .Nil => |n| try n.write(writer),
+            .Varargs => |n| try n.write(writer),
         }
     }
 };
@@ -346,6 +349,24 @@ pub const Nil = struct {
     /// Writes the integer value to the given writer in decimal format.
     pub fn write(_: *const Nil, writer: *Writer) !void {
         try writer.print("nil", .{});
+    }
+};
+
+/// Represents the varargs expression (...)
+/// Used in function parameters and expressions to represent variable arguments.
+/// Example: `function foo(...) end` or `return ...`
+pub const Varargs = struct {
+    /// The ... token
+    token: token.Token,
+
+    /// Returns the literal text of the varargs token.
+    pub fn tokenLiteral(self: *const Varargs) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the varargs to the given writer as "...".
+    pub fn write(_: *const Varargs, writer: *Writer) !void {
+        try writer.print("...", .{});
     }
 };
 

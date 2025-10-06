@@ -105,6 +105,7 @@ pub const Parser = struct {
         .{ "true", &parseBooleanExpression },
         .{ "false", &parseBooleanExpression },
         .{ "nil", &parseNilExpression },
+        .{ "dotdotdot", &parseVarargsExpression },
         // Unary operators
         .{ "not", &parsePrefixExpression },
         .{ "minus", &parsePrefixExpression },
@@ -420,6 +421,14 @@ pub const Parser = struct {
         const nil = try self.alloc.allocator().create(ast.Nil);
         nil.token = self.current_token.*;
         expr.* = .{ .Nil = nil };
+        return expr;
+    }
+
+    fn parseVarargsExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const varargs = try self.alloc.allocator().create(ast.Varargs);
+        varargs.token = self.current_token.*;
+        expr.* = .{ .Varargs = varargs };
         return expr;
     }
 
@@ -1245,6 +1254,130 @@ test "complex operator precedence" {
         .{ .input = "a or b and c < d;", .expected = "(a or (b and (c < d)));" },
         .{ .input = "x << 2 + 3;", .expected = "(x << (2 + 3));" },
         .{ .input = "-2 ^ 2;", .expected = "(-(2 ^ 2));" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "varargs expression" {
+    const input = "...";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Varargs => {
+                    try std.testing.expectEqualStrings("...", e.expr.tokenLiteral());
+                },
+                else => {
+                    unreachable;
+                },
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "varargs in return statement" {
+    const input = "return ...;";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Return => |ret| {
+            try std.testing.expect(ret.expr != null);
+            switch (ret.expr.?.*) {
+                .Varargs => {
+                    try std.testing.expectEqualStrings("...", ret.expr.?.tokenLiteral());
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "varargs in assignment" {
+    const input = "local x = ...;";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Let => |let| {
+            try std.testing.expectEqualStrings("x", let.name.value);
+            switch (let.expr.*) {
+                .Varargs => {
+                    try std.testing.expectEqualStrings("...", let.expr.tokenLiteral());
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "varargs string representation" {
+    const test_cases = .{
+        .{ .input = "...", .expected = "...;" },
+        .{ .input = "return ...", .expected = "return ...;" },
+        .{ .input = "local x = ...", .expected = "local x = ...;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "varargs vs concatenation disambiguation" {
+    // Ensure ... is parsed as varargs, not as .. followed by something else
+    const test_cases = .{
+        .{ .input = "a .. b", .expected = "(a .. b);" },
+        .{ .input = "...", .expected = "...;" },
     };
 
     const allocator = std.testing.allocator;
