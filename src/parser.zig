@@ -100,6 +100,7 @@ pub const Parser = struct {
         // Literals
         .{ "ident", &parseIdentifierExpression },
         .{ "int", &parseIntegerExpression },
+        .{ "string", &parseStringExpression },
         .{ "true", &parseBooleanExpression },
         .{ "false", &parseBooleanExpression },
         .{ "nil", &parseNilExpression },
@@ -390,6 +391,18 @@ pub const Parser = struct {
         const int = try self.alloc.allocator().create(ast.IntegerLiteral);
         int.value = try std.fmt.parseInt(i32, self.current_token.literal, 10);
         expr.* = .{ .Integer = int };
+        return expr;
+    }
+
+    fn parseStringExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const str = try self.alloc.allocator().create(ast.StringLiteral);
+        str.token = self.current_token.*;
+
+        // cut out the string literal quotations to keep the value only
+        const len = self.current_token.end_pos - self.current_token.start_pos;
+        str.value = self.current_token.literal[1..len];
+        expr.* = .{ .String = str };
         return expr;
     }
 
@@ -1162,6 +1175,27 @@ test "comparison operators" {
     const test_cases = .{
         .{ .input = "5 <= 10;", .expected = "(5 <= 10);" },
         .{ .input = "10 >= 5;", .expected = "(10 >= 5);" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "string literal parsing" {
+    const test_cases = .{
+        .{ .input = "\"hello world\"", .expected = "\"hello world\";" },
     };
 
     const allocator = std.testing.allocator;

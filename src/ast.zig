@@ -103,13 +103,14 @@ pub const ExpressionStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Integer, Prefix, Infix, Conditional, Boolean, Nil };
+pub const ExpressionTypes = enum { Identifier, Integer, String, Prefix, Infix, Conditional, Boolean, Nil };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
     Integer: *IntegerLiteral,
+    String: *StringLiteral,
     Prefix: *PrefixExpression,
     Infix: *InfixExpression,
     Conditional: *ConditionalExpression,
@@ -122,6 +123,7 @@ pub const Expression = union(ExpressionTypes) {
         return switch (self.*) {
             .Identifier => |n| n.tokenLiteral(),
             .Integer => |n| n.tokenLiteral(),
+            .String => |n| n.tokenLiteral(),
             .Boolean => |n| n.tokenLiteral(),
             .Prefix => |n| n.tokenLiteral(),
             .Infix => |n| n.tokenLiteral(),
@@ -136,6 +138,7 @@ pub const Expression = union(ExpressionTypes) {
         switch (self.*) {
             .Identifier => |n| try n.write(writer),
             .Integer => |n| try n.write(writer),
+            .String => |n| try n.write(writer),
             .Boolean => |n| try n.write(writer),
             .Prefix => |n| try n.write(writer),
             .Infix => |n| try n.write(writer),
@@ -276,6 +279,25 @@ pub const IntegerLiteral = struct {
     /// Writes the integer value to the given writer in decimal format.
     pub fn write(self: *const IntegerLiteral, writer: *Writer) !void {
         try writer.print("{d}", .{self.value});
+    }
+};
+
+/// Represents a string literal value in the source code.
+/// Example: `"hello"`, `"world"`, `"foo bar"`
+pub const StringLiteral = struct {
+    /// The string token
+    token: token.Token,
+    /// The string value (as it appears in source, including quotes)
+    value: []const u8,
+
+    /// Returns the literal text of the string token.
+    pub fn tokenLiteral(self: *const StringLiteral) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the string value to the given writer with quotes.
+    pub fn write(self: *const StringLiteral, writer: *Writer) !void {
+        _ = try writer.print("\"{s}\"", .{self.value});
     }
 };
 
