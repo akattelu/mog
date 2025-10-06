@@ -60,13 +60,28 @@ pub const Lexer = struct {
         }
     }
 
-    fn readNumber(self: *Lexer) []const u8 {
+    fn readNumber(self: *Lexer) struct { literal: []const u8, is_float: bool } {
         const start_pos = self.position;
+        var is_float = false;
+
+        // Read initial digits
         while (isDigit(self.ch)) {
             self.readChar();
         }
+
+        // Check for decimal point followed by digit (to distinguish from .. operator)
+        if (self.ch == '.' and isDigit(self.peekChar())) {
+            is_float = true;
+            self.readChar(); // consume '.'
+
+            // Read fractional part
+            while (isDigit(self.ch)) {
+                self.readChar();
+            }
+        }
+
         const number_as_string = self.input[start_pos..self.position];
-        return number_as_string;
+        return .{ .literal = number_as_string, .is_float = is_float };
     }
 
     fn readIdent(self: *Lexer) []const u8 {
@@ -286,8 +301,9 @@ pub const Lexer = struct {
                     tok.end_pos = self.position - 1;
                     return tok;
                 } else if (isDigit(self.ch)) {
-                    tok.literal = self.readNumber();
-                    tok.type = TokenType.int;
+                    const num_result = self.readNumber();
+                    tok.literal = num_result.literal;
+                    tok.type = if (num_result.is_float) TokenType.float else TokenType.int;
                     tok.start_pos = @intCast(self.position - tok.literal.len);
                     tok.end_pos = self.position - 1;
                     return tok;
@@ -428,5 +444,32 @@ test "token position tracking" {
         try std.testing.expectEqual(t.expectedType, tok.type);
         try std.testing.expectEqual(t.expectedStart, tok.start_pos);
         try std.testing.expectEqual(t.expectedEnd, tok.end_pos);
+    }
+}
+
+test "float number parsing" {
+    // Test float parsing and disambiguation from dot operators
+    const input = "3.14 42 1.0 99.999 123 .. 456";
+
+    const tests = [_]struct {
+        expectedType: TokenType,
+        expectedLiteral: []const u8,
+    }{
+        .{ .expectedType = TokenType.float, .expectedLiteral = "3.14" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "42" },
+        .{ .expectedType = TokenType.float, .expectedLiteral = "1.0" },
+        .{ .expectedType = TokenType.float, .expectedLiteral = "99.999" },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "123" },
+        .{ .expectedType = TokenType.dotdot, .expectedLiteral = ".." },
+        .{ .expectedType = TokenType.int, .expectedLiteral = "456" },
+    };
+
+    const allocator = std.testing.allocator;
+    var lexer = try Lexer.init(allocator, input);
+    defer lexer.deinit();
+    for (tests) |t| {
+        const tok = (try lexer.nextToken()).*;
+        try std.testing.expectEqualStrings(t.expectedLiteral, tok.literal);
+        try std.testing.expectEqual(t.expectedType, tok.type);
     }
 }

@@ -100,6 +100,7 @@ pub const Parser = struct {
         // Literals
         .{ "ident", &parseIdentifierExpression },
         .{ "int", &parseIntegerExpression },
+        .{ "float", &parseFloatExpression },
         .{ "string", &parseStringExpression },
         .{ "true", &parseBooleanExpression },
         .{ "false", &parseBooleanExpression },
@@ -388,9 +389,17 @@ pub const Parser = struct {
 
     fn parseIntegerExpression(self: *Parser) !*ast.Expression {
         const expr = try self.alloc.allocator().create(ast.Expression);
-        const int = try self.alloc.allocator().create(ast.IntegerLiteral);
-        int.value = try std.fmt.parseInt(i32, self.current_token.literal, 10);
-        expr.* = .{ .Integer = int };
+        const int = try self.alloc.allocator().create(ast.NumberLiteral);
+        int.value = .{ .Integer = try std.fmt.parseInt(i32, self.current_token.literal, 10) };
+        expr.* = .{ .Number = int };
+        return expr;
+    }
+
+    fn parseFloatExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const float = try self.alloc.allocator().create(ast.NumberLiteral);
+        float.value = .{ .Float = try std.fmt.parseFloat(f32, self.current_token.literal) };
+        expr.* = .{ .Number = float };
         return expr;
     }
 
@@ -543,6 +552,7 @@ test "identifier expressions" {
 test "integer expressions" {
     const input =
         \\42;
+        \\3.14
     ;
 
     const allocator = std.testing.allocator;
@@ -552,12 +562,26 @@ test "integer expressions" {
     defer parser.deinit();
     const program = try parser.parseProgram();
     try assertNoErrors(&parser);
-    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+    try std.testing.expectEqual(@as(usize, 2), program.statements.len);
     switch (program.statements[0].*) {
         .Expression => |e| {
             switch (e.expr.*) {
-                .Integer => |int| {
-                    try std.testing.expectEqual(42, int.value);
+                .Number => |n| {
+                    try std.testing.expectEqual(42, n.value.Integer);
+                },
+                else => {
+                    unreachable;
+                },
+            }
+        },
+        else => unreachable,
+    }
+
+    switch (program.statements[1].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .Number => |n| {
+                    try std.testing.expectEqual(3.14, n.value.Float);
                 },
                 else => {
                     unreachable;
@@ -683,14 +707,14 @@ test "infix expressions" {
                     .Infix => |inf| {
                         try std.testing.expectEqualStrings(tc.operator, inf.operator);
                         switch (inf.left.*) {
-                            .Integer => |left_int| {
-                                try std.testing.expectEqual(tc.left_value, left_int.value);
+                            .Number => |left_int| {
+                                try std.testing.expectEqual(tc.left_value, left_int.value.Integer);
                             },
                             else => unreachable,
                         }
                         switch (inf.right.*) {
-                            .Integer => |right_int| {
-                                try std.testing.expectEqual(tc.right_value, right_int.value);
+                            .Number => |right_int| {
+                                try std.testing.expectEqual(tc.right_value, right_int.value.Integer);
                             },
                             else => unreachable,
                         }
@@ -804,8 +828,8 @@ test "prefix expressions" {
                     .Prefix => |p| {
                         try std.testing.expectEqualStrings(tc.operator, p.operator);
                         switch (p.expression.*) {
-                            .Integer => |int| {
-                                try std.testing.expectEqual(tc.value, int.value);
+                            .Number => |int| {
+                                try std.testing.expectEqual(tc.value, int.value.Integer);
                             },
                             else => unreachable,
                         }

@@ -6,6 +6,9 @@ const AllocatorError = std.mem.Allocator.Error;
 /// The different types of statements in the AST.
 pub const StatementTypes = enum { Let, Return, Expression };
 
+// Numbers can be integers or floats
+pub const NumberType = enum { Integer, Float };
+
 /// A tagged union representing any statement in the language.
 /// Statements are the top-level constructs that make up a program.
 pub const Statement = union(StatementTypes) {
@@ -103,13 +106,13 @@ pub const ExpressionStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Integer, String, Prefix, Infix, Conditional, Boolean, Nil };
+pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
 pub const Expression = union(ExpressionTypes) {
     Identifier: *Identifier,
-    Integer: *IntegerLiteral,
+    Number: *NumberLiteral,
     String: *StringLiteral,
     Prefix: *PrefixExpression,
     Infix: *InfixExpression,
@@ -122,7 +125,7 @@ pub const Expression = union(ExpressionTypes) {
     pub fn tokenLiteral(self: *const Expression) []const u8 {
         return switch (self.*) {
             .Identifier => |n| n.tokenLiteral(),
-            .Integer => |n| n.tokenLiteral(),
+            .Number => |n| n.tokenLiteral(),
             .String => |n| n.tokenLiteral(),
             .Boolean => |n| n.tokenLiteral(),
             .Prefix => |n| n.tokenLiteral(),
@@ -137,7 +140,7 @@ pub const Expression = union(ExpressionTypes) {
     pub fn write(self: *const Expression, writer: *Writer) Writer.Error!void {
         switch (self.*) {
             .Identifier => |n| try n.write(writer),
-            .Integer => |n| try n.write(writer),
+            .Number => |n| try n.write(writer),
             .String => |n| try n.write(writer),
             .Boolean => |n| try n.write(writer),
             .Prefix => |n| try n.write(writer),
@@ -263,22 +266,28 @@ pub const ConditionalExpression = struct {
 /// Used within conditional expressions and other control flow constructs.
 pub const Block = Program;
 
-/// Represents an integer literal value in the source code.
-/// Example: `42`, `-10`, `0`
-pub const IntegerLiteral = struct {
-    /// The integer token
+/// Represents an integer or float literal value
+/// The inner `value` field is a union over i32 or f32
+pub const NumberLiteral = struct {
     token: token.Token,
-    /// The parsed integer value (currently limited to i32)
-    value: i32,
+    value: union(NumberType) {
+        Integer: i32,
+        Float: f32,
+    },
 
-    /// Returns the literal text of the integer token.
-    pub fn tokenLiteral(self: *const IntegerLiteral) []const u8 {
+    pub fn tokenLiteral(self: *const NumberLiteral) []const u8 {
         return self.token.literal;
     }
 
-    /// Writes the integer value to the given writer in decimal format.
-    pub fn write(self: *const IntegerLiteral, writer: *Writer) !void {
-        try writer.print("{d}", .{self.value});
+    pub fn write(self: *const NumberLiteral, writer: *Writer) !void {
+        switch (self.value) {
+            .Integer => |i| {
+                try writer.print("{d}", .{i});
+            },
+            .Float => |f| {
+                try writer.print("{d}", .{f});
+            },
+        }
     }
 };
 
