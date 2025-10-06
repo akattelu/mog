@@ -5,7 +5,7 @@ const AllocatorError = std.mem.Allocator.Error;
 const testing = std.testing;
 
 /// The different types of statements in the AST.
-pub const StatementTypes = enum { Let, Return, Expression };
+pub const StatementTypes = enum { Assignment, Return, Expression };
 
 // Numbers can be integers or floats
 pub const NumberType = enum { Integer, Float };
@@ -13,7 +13,7 @@ pub const NumberType = enum { Integer, Float };
 /// A tagged union representing any statement in the language.
 /// Statements are the top-level constructs that make up a program.
 pub const Statement = union(StatementTypes) {
-    Let: *LetStatement,
+    Assignment: *AssignmentStatement,
     Return: *ReturnStatement,
     Expression: *ExpressionStatement,
 
@@ -21,7 +21,7 @@ pub const Statement = union(StatementTypes) {
     /// Useful for debugging and error messages.
     pub fn tokenLiteral(self: *const Statement) []const u8 {
         switch (self.*) {
-            .Let => |n| return n.tokenLiteral(),
+            .Assignment => |n| return n.tokenLiteral(),
             .Return => |n| return n.tokenLiteral(),
             .Expression => |n| return n.tokenLiteral(),
         }
@@ -31,7 +31,7 @@ pub const Statement = union(StatementTypes) {
     /// All statements are terminated with a semicolon.
     pub fn write(self: *const Statement, writer: *Writer) !void {
         switch (self.*) {
-            .Let => |n| try n.write(writer),
+            .Assignment => |n| try n.write(writer),
             .Return => |n| try n.write(writer),
             .Expression => |n| try n.write(writer),
         }
@@ -62,26 +62,30 @@ pub const ReturnStatement = struct {
     }
 };
 
-/// Represents a local variable declaration with initialization.
-/// Example: `local x = 42` or `local name = "value"`
-pub const LetStatement = struct {
-    /// The 'local' keyword token
+/// Represents an assignment statement, either local or global.
+/// Examples: `local x = 42`, `x, y = 1, 2`, `local a, b = foo()`
+pub const AssignmentStatement = struct {
+    /// The token (either 'local' keyword or first identifier)
     token: token.Token,
-    /// The identifier being declared
-    name: *Identifier,
-    /// The expression assigned to the variable
+    /// The list of identifiers being assigned to
+    names: *NameList,
+    /// The expression assigned to the variables
     expr: *Expression,
+    /// Whether this is a local declaration
+    is_local: bool,
 
-    /// Returns the literal text of the 'local' keyword.
-    pub fn tokenLiteral(self: *const LetStatement) []const u8 {
+    /// Returns the literal text of the token.
+    pub fn tokenLiteral(self: *const AssignmentStatement) []const u8 {
         return self.token.literal;
     }
 
-    /// Writes the let statement to the given writer.
-    /// Format: "local <name> = <expr>"
-    pub fn write(self: *const LetStatement, writer: *Writer) !void {
-        _ = try writer.writeAll("local ");
-        try self.name.write(writer);
+    /// Writes the assignment statement to the given writer.
+    /// Format: "[local] <names> = <expr>"
+    pub fn write(self: *const AssignmentStatement, writer: *Writer) !void {
+        if (self.is_local) {
+            _ = try writer.writeAll("local ");
+        }
+        try self.names.write(writer);
         _ = try writer.writeAll(" = ");
         try self.expr.write(writer);
     }

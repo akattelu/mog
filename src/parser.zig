@@ -222,7 +222,15 @@ pub const Parser = struct {
         const stmt = try self.alloc.allocator().create(ast.Statement);
         switch (self.current_token.type) {
             .local => {
-                stmt.* = .{ .Let = try self.parseLetStatement() };
+                stmt.* = .{ .Assignment = try self.parseAssignmentStatement(true) };
+            },
+            .ident => {
+                // Look ahead to determine if this is an assignment or expression
+                if (self.peekTokenIs(.assign) or self.peekTokenIs(.comma)) {
+                    stmt.* = .{ .Assignment = try self.parseAssignmentStatement(false) };
+                } else {
+                    stmt.* = .{ .Expression = try self.parseExpressionStatement() };
+                }
             },
             .t_return => {
                 stmt.* = .{ .Return = try self.parseReturnStatement() };
@@ -250,26 +258,50 @@ pub const Parser = struct {
         return rs;
     }
 
-    fn parseLetStatement(self: *Parser) !*ast.LetStatement {
-        const ls = try self.alloc.allocator().create(ast.LetStatement);
-        ls.token = self.current_token.*;
-        if (!self.expectAndPeek(.ident)) {
-            return ParserError.fail;
+    fn parseAssignmentStatement(self: *Parser, is_local: bool) !*ast.AssignmentStatement {
+        const as = try self.alloc.allocator().create(ast.AssignmentStatement);
+        as.is_local = is_local;
+
+        if (is_local) {
+            as.token = self.current_token.*; // 'local' token
+            if (!self.expectAndPeek(.ident)) {
+                return ParserError.fail;
+            }
+        } else {
+            as.token = self.current_token.*; // first identifier token
         }
-        ls.name = try self.parseIdentifier();
+
+        // Parse the first identifier
+        const first_ident = try self.parseIdentifier();
+        const name_list = try self.alloc.allocator().create(ast.NameList);
+        name_list.* = try ast.NameList.init(self.alloc.allocator(), first_ident);
+
+        // Parse additional identifiers if present (comma-separated)
+        while (self.peekTokenIs(.comma)) {
+            try self.nextToken(); // consume comma
+            if (!self.expectAndPeek(.ident)) {
+                return ParserError.fail;
+            }
+            const next_ident = try self.parseIdentifier();
+            try name_list.add(next_ident);
+        }
+
+        as.names = name_list;
+
+        // Expect assignment operator
         if (!self.expectAndPeek(.assign)) {
             return ParserError.fail;
         }
         try self.nextToken();
 
         const expr = try self.parseExpression(Precedence.lowest);
-        ls.expr = expr;
+        as.expr = expr;
 
         if (self.peekTokenIs(TokenType.semicolon)) {
             try self.nextToken();
         }
 
-        return ls;
+        return as;
     }
 
     fn parseExpressionStatement(self: *Parser) !*ast.ExpressionStatement {
@@ -476,8 +508,8 @@ test "local statements" {
     const program = try parser.parseProgram();
     try assertNoErrors(&parser);
     try std.testing.expectEqual(2, program.statements.len);
-    try testLetStatement(program.statements[0], "x");
-    try testLetStatement(program.statements[1], "foo");
+    try testAssignmentStatement(program.statements[0], "x", true);
+    try testAssignmentStatement(program.statements[1], "foo", true);
 }
 
 test "statement errors" {
@@ -1047,13 +1079,17 @@ test "string writer" {
     }
 }
 
-fn testLetStatement(s: *ast.Statement, name: []const u8) !void {
-    try std.testing.expectEqualStrings("local", s.tokenLiteral());
+fn testAssignmentStatement(s: *ast.Statement, name: []const u8, is_local: bool) !void {
+    if (is_local) {
+        try std.testing.expectEqualStrings("local", s.tokenLiteral());
+    }
 
     switch (s.*) {
-        .Let => |ls| {
-            try std.testing.expectEqualStrings(name, ls.name.value);
-            try std.testing.expectEqualStrings(name, ls.name.tokenLiteral());
+        .Assignment => |as| {
+            try std.testing.expectEqual(is_local, as.is_local);
+            try std.testing.expectEqual(@as(usize, 1), as.names.names.items.len);
+            try std.testing.expectEqualStrings(name, as.names.names.items[0].value);
+            try std.testing.expectEqualStrings(name, as.names.names.items[0].tokenLiteral());
         },
         else => unreachable,
     }
@@ -1337,11 +1373,12 @@ test "varargs in assignment" {
     try std.testing.expectEqual(@as(usize, 1), program.statements.len);
 
     switch (program.statements[0].*) {
-        .Let => |let| {
-            try std.testing.expectEqualStrings("x", let.name.value);
-            switch (let.expr.*) {
+        .Assignment => |assign| {
+            try std.testing.expectEqual(@as(usize, 1), assign.names.names.items.len);
+            try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+            switch (assign.expr.*) {
                 .Varargs => {
-                    try std.testing.expectEqualStrings("...", let.expr.tokenLiteral());
+                    try std.testing.expectEqualStrings("...", assign.expr.tokenLiteral());
                 },
                 else => unreachable,
             }
@@ -1378,6 +1415,100 @@ test "varargs vs concatenation disambiguation" {
     const test_cases = .{
         .{ .input = "a .. b", .expected = "(a .. b);" },
         .{ .input = "...", .expected = "...;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "non-local assignment" {
+    const input = "x = 5;";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Assignment => |assign| {
+            try std.testing.expectEqual(false, assign.is_local);
+            try std.testing.expectEqual(@as(usize, 1), assign.names.names.items.len);
+            try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+        },
+        else => unreachable,
+    }
+}
+
+test "multiple name assignment - local" {
+    const input = "local x, y, z = 1;";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Assignment => |assign| {
+            try std.testing.expectEqual(true, assign.is_local);
+            try std.testing.expectEqual(@as(usize, 3), assign.names.names.items.len);
+            try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+            try std.testing.expectEqualStrings("y", assign.names.names.items[1].value);
+            try std.testing.expectEqualStrings("z", assign.names.names.items[2].value);
+        },
+        else => unreachable,
+    }
+}
+
+test "multiple name assignment - non-local" {
+    const input = "x, y, z = 1;";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Assignment => |assign| {
+            try std.testing.expectEqual(false, assign.is_local);
+            try std.testing.expectEqual(@as(usize, 3), assign.names.names.items.len);
+            try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+            try std.testing.expectEqualStrings("y", assign.names.names.items[1].value);
+            try std.testing.expectEqualStrings("z", assign.names.names.items[2].value);
+        },
+        else => unreachable,
+    }
+}
+
+test "assignment string representation" {
+    const test_cases = .{
+        .{ .input = "local x = 5", .expected = "local x = 5;" },
+        .{ .input = "x = 5", .expected = "x = 5;" },
+        .{ .input = "local x, y = 10", .expected = "local x, y = 10;" },
+        .{ .input = "a, b, c = 42", .expected = "a, b, c = 42;" },
     };
 
     const allocator = std.testing.allocator;
