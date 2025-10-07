@@ -11,6 +11,12 @@ const Parser = @import("parser.zig").Parser;
 const ParserError = @import("parser.zig").Parser.ParserError;
 pub const token = @import("token.zig");
 
+// Test declaration references
+pub const parser_tests = @import("tests/parser.test.zig");
+pub const lexer_tests = @import("tests/lexer.test.zig");
+pub const token_tests = @import("tests/token.test.zig");
+pub const ast_tests = @import("tests/ast.test.zig");
+
 pub fn main() !void {
     // Read command line arguments and skip the first one
     var args = try process.argsWithAllocator(std.heap.page_allocator);

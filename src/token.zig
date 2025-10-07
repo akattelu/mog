@@ -109,19 +109,3 @@ pub const Token = struct {
         try writer.print("{s}[{any}]@{d}..{d}", .{ self.literal, self.type, self.start_pos, self.end_pos });
     }
 };
-
-test "write" {
-    // Create testing allocator
-    const alloc = std.testing.allocator;
-
-    // Create allocating writer interface
-    var writer = Writer.Allocating.init(alloc);
-    defer writer.deinit();
-
-    // Write token
-    const tok = Token{ .type = .ident, .literal = "hello", .start_pos = 0, .end_pos = 5 };
-    try tok.write(&(writer.writer));
-
-    const actual = writer.written();
-    try std.testing.expectEqualStrings("hello[.ident]@0..5", actual);
-}
