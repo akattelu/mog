@@ -166,7 +166,7 @@ pub const ExpressionStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs };
+pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
@@ -180,6 +180,7 @@ pub const Expression = union(ExpressionTypes) {
     Boolean: *BooleanLiteral,
     Nil: *Nil,
     Varargs: *Varargs,
+    FunctionDef: *FunctionDefExpression,
 
     /// Returns the literal text of the first token in this expression.
     /// Useful for debugging and error messages.
@@ -194,6 +195,7 @@ pub const Expression = union(ExpressionTypes) {
             .Conditional => |n| n.tokenLiteral(),
             .Nil => |n| n.tokenLiteral(),
             .Varargs => |n| n.tokenLiteral(),
+            .FunctionDef => |n| n.tokenLiteral(),
         };
     }
 
@@ -210,6 +212,7 @@ pub const Expression = union(ExpressionTypes) {
             .Conditional => |n| try n.write(writer),
             .Nil => |n| try n.write(writer),
             .Varargs => |n| try n.write(writer),
+            .FunctionDef => |n| try n.write(writer),
         }
     }
 };
@@ -427,6 +430,128 @@ pub const Varargs = struct {
     /// Writes the varargs to the given writer as "...".
     pub fn write(_: *const Varargs, writer: *Writer) !void {
         try writer.print("...", .{});
+    }
+};
+
+/// Represents a list of function parameters
+/// Can contain named parameters and/or varargs
+/// Example: `x, y, z` or `a, b, ...` or just `...`
+pub const ParamList = struct {
+    /// The token of the first parameter
+    token: token.Token,
+    /// List of parameter names
+    names: std.ArrayList(*Identifier),
+    /// Whether this function accepts varargs
+    has_varargs: bool,
+    /// Allocator used for managing the list
+    allocator: std.mem.Allocator,
+
+    /// Create a ParamList with one identifier
+    pub fn init(allocator: std.mem.Allocator, name: *Identifier) !ParamList {
+        var names = try std.ArrayList(*Identifier).initCapacity(allocator, 3);
+        try names.append(allocator, name);
+        return .{ .token = name.token, .names = names, .has_varargs = false, .allocator = allocator };
+    }
+
+    /// Create a ParamList with only varargs
+    pub fn initVarargs(allocator: std.mem.Allocator, varargs_token: token.Token) !ParamList {
+        const names = std.ArrayList(*Identifier).initCapacity(allocator, 0) catch |err| return err;
+        return .{ .token = varargs_token, .names = names, .has_varargs = true, .allocator = allocator };
+    }
+
+    /// Add a new parameter to the list
+    pub fn add(self: *ParamList, name: *Identifier) !void {
+        try self.names.append(self.allocator, name);
+    }
+
+    /// Mark this parameter list as having varargs
+    pub fn setVarargs(self: *ParamList) void {
+        self.has_varargs = true;
+    }
+
+    /// Clear memory
+    pub fn deinit(self: *ParamList) void {
+        self.names.deinit();
+    }
+
+    /// Returns the literal token text
+    pub fn tokenLiteral(self: *const ParamList) []const u8 {
+        if (self.names.items.len > 0) {
+            return self.names.items[0].value;
+        }
+        return "...";
+    }
+
+    /// Writes comma-separated parameter list to writer
+    pub fn write(self: *const ParamList, writer: *Writer) !void {
+        if (self.names.items.len == 0 and self.has_varargs) {
+            try writer.writeAll("...");
+            return;
+        }
+
+        var i: usize = 0;
+        while (i < self.names.items.len) : (i += 1) {
+            try self.names.items[i].write(writer);
+            if (i < self.names.items.len - 1 or self.has_varargs) {
+                try writer.writeAll(", ");
+            }
+        }
+
+        if (self.has_varargs) {
+            try writer.writeAll("...");
+        }
+    }
+};
+
+/// Represents a function body including parameters and block
+/// Example: `(x, y) return x + y end`
+pub const FunctionBody = struct {
+    /// The opening paren token
+    token: token.Token,
+    /// Optional parameter list
+    params: ?*ParamList,
+    /// The function body block
+    block: *Block,
+
+    /// Returns the literal text of the token
+    pub fn tokenLiteral(self: *const FunctionBody) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the function body to writer
+    /// Format: "([params]) <block> end"
+    pub fn write(self: *const FunctionBody, writer: *Writer) !void {
+        try writer.writeAll("(");
+        if (self.params != null) {
+            try self.params.?.write(writer);
+        }
+        try writer.writeAll(")");
+        if (self.block.statements.len > 0) {
+            try writer.writeAll(" ");
+        }
+        try self.block.write(writer);
+        try writer.writeAll(" end");
+    }
+};
+
+/// Represents a function definition expression
+/// Example: `function(x, y) return x + y end`
+pub const FunctionDefExpression = struct {
+    /// The 'function' keyword token
+    token: token.Token,
+    /// The function body
+    body: *FunctionBody,
+
+    /// Returns the literal text of the 'function' keyword
+    pub fn tokenLiteral(self: *const FunctionDefExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the function definition to writer
+    /// Format: "function<body>"
+    pub fn write(self: *const FunctionDefExpression, writer: *Writer) !void {
+        try writer.writeAll("function");
+        try self.body.write(writer);
     }
 };
 

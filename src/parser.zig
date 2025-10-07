@@ -113,6 +113,8 @@ pub const Parser = struct {
         .{ "tilde", &parsePrefixExpression },
         // Control flow
         .{ "t_if", &parseConditionalExpression },
+        // Function definitions
+        .{ "function", &parseFunctionDefExpression },
         // Grouping
         .{ "lparen", &parseParenthesizedExpression },
     });
@@ -466,7 +468,6 @@ pub const Parser = struct {
 
     /// Parse a boolean expression - errors if value is not true or false
     fn parseBooleanExpression(self: *Parser) !*ast.Expression {
-        std.log.info("parsing boolean expression", .{});
         const expr = try self.alloc.allocator().create(ast.Expression);
         const boolean = try self.alloc.allocator().create(ast.BooleanLiteral);
         boolean.token = self.current_token.*;
@@ -478,6 +479,96 @@ pub const Parser = struct {
             return ParserError.fail;
         }
         expr.* = .{ .Boolean = boolean };
+        return expr;
+    }
+
+    /// Parse a parameter list for function definitions
+    /// Grammar: namelist [',' '...'] | '...'
+    fn parseParamList(self: *Parser) !*ast.ParamList {
+        const param_list = try self.alloc.allocator().create(ast.ParamList);
+
+        // Check if it's just varargs
+        if (self.currentTokenIs(.dotdotdot)) {
+            param_list.* = try ast.ParamList.initVarargs(self.alloc.allocator(), self.current_token.*);
+            return param_list;
+        }
+
+        // Parse first parameter (must be identifier)
+        if (!self.currentTokenIs(.ident)) {
+            return ParserError.fail;
+        }
+        const first_param = try self.parseIdentifier();
+        param_list.* = try ast.ParamList.init(self.alloc.allocator(), first_param);
+
+        // Parse additional parameters
+        while (self.peekTokenIs(.comma)) {
+            try self.nextToken(); // consume comma
+            try self.nextToken(); // move to next param
+
+            // Check if this is trailing varargs
+            if (self.currentTokenIs(.dotdotdot)) {
+                param_list.setVarargs();
+                return param_list;
+            }
+
+            // Must be an identifier
+            if (!self.currentTokenIs(.ident)) {
+                return ParserError.fail;
+            }
+            const param = try self.parseIdentifier();
+            try param_list.add(param);
+        }
+
+        return param_list;
+    }
+
+    /// Parse a function body
+    /// Grammar: '(' [parlist] ')' block end
+    fn parseFunctionBody(self: *Parser) !*ast.FunctionBody {
+        const body = try self.alloc.allocator().create(ast.FunctionBody);
+
+        // Expect opening paren
+        if (!self.expectAndPeek(.lparen)) {
+            return ParserError.fail;
+        }
+        body.token = self.current_token.*; // lparen token
+
+        // Check if there are parameters
+        try self.nextToken(); // move past lparen
+        if (self.currentTokenIs(.rparen)) {
+            // No parameters
+            body.params = null;
+        } else {
+            // Parse parameter list
+            body.params = try self.parseParamList();
+            // Move to rparen
+            if (!self.expectAndPeek(.rparen)) {
+                return ParserError.fail;
+            }
+        }
+
+        // Move past rparen and parse block
+        try self.nextToken();
+        body.block = try self.parseBlock();
+
+        // Current token should be 'end'
+        if (!self.currentTokenIs(.end)) {
+            return ParserError.fail;
+        }
+
+        return body;
+    }
+
+    /// Parse a function definition expression
+    /// Grammar: function funcbody
+    fn parseFunctionDefExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const func_def = try self.alloc.allocator().create(ast.FunctionDefExpression);
+
+        func_def.token = self.current_token.*; // 'function' token
+        func_def.body = try self.parseFunctionBody();
+
+        expr.* = .{ .FunctionDef = func_def };
         return expr;
     }
 };
@@ -1509,6 +1600,268 @@ test "assignment string representation" {
         .{ .input = "x = 5", .expected = "x = 5;" },
         .{ .input = "local x, y = 10", .expected = "local x, y = 10;" },
         .{ .input = "a, b, c = 42", .expected = "a, b, c = 42;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "function definition - no parameters" {
+    const input = "function() end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .FunctionDef => |func| {
+                    try std.testing.expectEqualStrings("function", func.tokenLiteral());
+                    try std.testing.expect(func.body.params == null);
+                    try std.testing.expectEqual(@as(usize, 0), func.body.block.statements.len);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - single parameter" {
+    const input = "function(x) end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .FunctionDef => |func| {
+                    try std.testing.expect(func.body.params != null);
+                    try std.testing.expectEqual(@as(usize, 1), func.body.params.?.names.items.len);
+                    try std.testing.expectEqualStrings("x", func.body.params.?.names.items[0].value);
+                    try std.testing.expectEqual(false, func.body.params.?.has_varargs);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - multiple parameters" {
+    const input = "function(x, y, z) end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .FunctionDef => |func| {
+                    try std.testing.expect(func.body.params != null);
+                    try std.testing.expectEqual(@as(usize, 3), func.body.params.?.names.items.len);
+                    try std.testing.expectEqualStrings("x", func.body.params.?.names.items[0].value);
+                    try std.testing.expectEqualStrings("y", func.body.params.?.names.items[1].value);
+                    try std.testing.expectEqualStrings("z", func.body.params.?.names.items[2].value);
+                    try std.testing.expectEqual(false, func.body.params.?.has_varargs);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - only varargs" {
+    const input = "function(...) end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .FunctionDef => |func| {
+                    try std.testing.expect(func.body.params != null);
+                    try std.testing.expectEqual(@as(usize, 0), func.body.params.?.names.items.len);
+                    try std.testing.expectEqual(true, func.body.params.?.has_varargs);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - parameters with varargs" {
+    const input = "function(a, b, ...) end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .FunctionDef => |func| {
+                    try std.testing.expect(func.body.params != null);
+                    try std.testing.expectEqual(@as(usize, 2), func.body.params.?.names.items.len);
+                    try std.testing.expectEqualStrings("a", func.body.params.?.names.items[0].value);
+                    try std.testing.expectEqualStrings("b", func.body.params.?.names.items[1].value);
+                    try std.testing.expectEqual(true, func.body.params.?.has_varargs);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - with body statements" {
+    const input = "function(x) return x + 1 end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .FunctionDef => |func| {
+                    try std.testing.expectEqual(@as(usize, 1), func.body.block.statements.len);
+                    switch (func.body.block.statements[0].*) {
+                        .Return => |ret| {
+                            try std.testing.expect(ret.expr != null);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - in assignment" {
+    const input = "local f = function(x) return x end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Assignment => |assign| {
+            try std.testing.expectEqual(true, assign.is_local);
+            try std.testing.expectEqualStrings("f", assign.names.names.items[0].value);
+            switch (assign.expr.*) {
+                .FunctionDef => |func| {
+                    try std.testing.expectEqualStrings("function", func.tokenLiteral());
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - nested functions" {
+    const input = "function() return function() end end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .FunctionDef => |outer_func| {
+                    try std.testing.expectEqual(@as(usize, 1), outer_func.body.block.statements.len);
+                    switch (outer_func.body.block.statements[0].*) {
+                        .Return => |ret| {
+                            switch (ret.expr.?.*) {
+                                .FunctionDef => |inner_func| {
+                                    try std.testing.expectEqualStrings("function", inner_func.tokenLiteral());
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function definition - string representation" {
+    const test_cases = .{
+        .{ .input = "function() end", .expected = "function() end;" },
+        .{ .input = "function(x) end", .expected = "function(x) end;" },
+        .{ .input = "function(x, y, z) end", .expected = "function(x, y, z) end;" },
+        .{ .input = "function(...) end", .expected = "function(...) end;" },
+        .{ .input = "function(a, b, ...) end", .expected = "function(a, b, ...) end;" },
+        .{ .input = "function(x) return x end", .expected = "function(x) return x; end;" },
+        .{ .input = "local f = function() end", .expected = "local f = function() end;" },
     };
 
     const allocator = std.testing.allocator;
