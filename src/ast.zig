@@ -5,7 +5,7 @@ const AllocatorError = std.mem.Allocator.Error;
 const testing = std.testing;
 
 /// The different types of statements in the AST.
-pub const StatementTypes = enum { Assignment, Return, Expression, FunctionDeclaration };
+pub const StatementTypes = enum { Assignment, Return, Expression, FunctionDeclaration, Do, While, Repeat, ForNumeric, ForGeneric, Break };
 
 // Numbers can be integers or floats
 pub const NumberType = enum { Integer, Float };
@@ -17,6 +17,12 @@ pub const Statement = union(StatementTypes) {
     Return: *ReturnStatement,
     Expression: *ExpressionStatement,
     FunctionDeclaration: *FunctionDeclaration,
+    Do: *DoStatement,
+    While: *WhileStatement,
+    Repeat: *RepeatStatement,
+    ForNumeric: *ForNumericStatement,
+    ForGeneric: *ForGenericStatement,
+    Break: *BreakStatement,
 
     /// Returns the literal text of the first token in this statement.
     /// Useful for debugging and error messages.
@@ -26,6 +32,12 @@ pub const Statement = union(StatementTypes) {
             .Return => |n| return n.tokenLiteral(),
             .Expression => |n| return n.tokenLiteral(),
             .FunctionDeclaration => |n| return n.tokenLiteral(),
+            .Do => |n| return n.tokenLiteral(),
+            .While => |n| return n.tokenLiteral(),
+            .Repeat => |n| return n.tokenLiteral(),
+            .ForNumeric => |n| return n.tokenLiteral(),
+            .ForGeneric => |n| return n.tokenLiteral(),
+            .Break => |n| return n.tokenLiteral(),
         }
     }
 
@@ -37,6 +49,12 @@ pub const Statement = union(StatementTypes) {
             .Return => |n| try n.write(writer),
             .Expression => |n| try n.write(writer),
             .FunctionDeclaration => |n| try n.write(writer),
+            .Do => |n| try n.write(writer),
+            .While => |n| try n.write(writer),
+            .Repeat => |n| try n.write(writer),
+            .ForNumeric => |n| try n.write(writer),
+            .ForGeneric => |n| try n.write(writer),
+            .Break => |n| try n.write(writer),
         }
         _ = try writer.writeAll(";");
     }
@@ -165,6 +183,184 @@ pub const ExpressionStatement = struct {
     /// Simply delegates to the expression's write method.
     pub fn write(self: *const ExpressionStatement, writer: *Writer) !void {
         try self.expr.write(writer);
+    }
+};
+
+/// Represents a do-end block statement.
+/// Example: `do x = 5 end`
+pub const DoStatement = struct {
+    /// The 'do' keyword token
+    token: token.Token,
+    /// The block of statements to execute
+    block: *Block,
+
+    /// Returns the literal text of the 'do' keyword.
+    pub fn tokenLiteral(self: *const DoStatement) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the do statement to the given writer.
+    /// Format: "do <block> end"
+    pub fn write(self: *const DoStatement, writer: *Writer) !void {
+        _ = try writer.writeAll("do ");
+        try self.block.write(writer);
+        _ = try writer.writeAll(" end");
+    }
+};
+
+/// Represents a while loop statement.
+/// Example: `while x > 0 do x = x - 1 end`
+pub const WhileStatement = struct {
+    /// The 'while' keyword token
+    token: token.Token,
+    /// The condition expression to evaluate
+    condition: *Expression,
+    /// The block of statements to execute while condition is true
+    block: *Block,
+
+    /// Returns the literal text of the 'while' keyword.
+    pub fn tokenLiteral(self: *const WhileStatement) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the while statement to the given writer.
+    /// Format: "while <condition> do <block> end"
+    pub fn write(self: *const WhileStatement, writer: *Writer) !void {
+        _ = try writer.writeAll("while ");
+        try self.condition.write(writer);
+        _ = try writer.writeAll(" do ");
+        try self.block.write(writer);
+        _ = try writer.writeAll(" end");
+    }
+};
+
+/// Represents a repeat-until loop statement.
+/// Example: `repeat x = x - 1 until x <= 0`
+pub const RepeatStatement = struct {
+    /// The 'repeat' keyword token
+    token: token.Token,
+    /// The block of statements to execute
+    block: *Block,
+    /// The condition expression to evaluate after each iteration
+    condition: *Expression,
+
+    /// Returns the literal text of the 'repeat' keyword.
+    pub fn tokenLiteral(self: *const RepeatStatement) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the repeat statement to the given writer.
+    /// Format: "repeat <block> until <condition>"
+    pub fn write(self: *const RepeatStatement, writer: *Writer) !void {
+        _ = try writer.writeAll("repeat ");
+        try self.block.write(writer);
+        _ = try writer.writeAll(" until ");
+        try self.condition.write(writer);
+    }
+};
+
+/// Represents a numeric for loop statement.
+/// Example: `for i = 1, 10, 2 do print(i) end`
+pub const ForNumericStatement = struct {
+    /// The 'for' keyword token
+    token: token.Token,
+    /// The loop variable name
+    var_name: *Identifier,
+    /// The initial value expression
+    start: *Expression,
+    /// The final value expression
+    end: *Expression,
+    /// The optional step value expression (defaults to 1 if null)
+    step: ?*Expression,
+    /// The block of statements to execute
+    block: *Block,
+
+    /// Returns the literal text of the 'for' keyword.
+    pub fn tokenLiteral(self: *const ForNumericStatement) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the numeric for statement to the given writer.
+    /// Format: "for <var> = <start>, <end>[, <step>] do <block> end"
+    pub fn write(self: *const ForNumericStatement, writer: *Writer) !void {
+        _ = try writer.writeAll("for ");
+        try self.var_name.write(writer);
+        _ = try writer.writeAll(" = ");
+        try self.start.write(writer);
+        _ = try writer.writeAll(", ");
+        try self.end.write(writer);
+        if (self.step != null) {
+            _ = try writer.writeAll(", ");
+            try self.step.?.write(writer);
+        }
+        _ = try writer.writeAll(" do ");
+        try self.block.write(writer);
+        _ = try writer.writeAll(" end");
+    }
+};
+
+/// Represents a generic for loop statement (iterator-based).
+/// Example: `for k, v in pairs(t) do print(k, v) end`
+pub const ForGenericStatement = struct {
+    /// The 'for' keyword token
+    token: token.Token,
+    /// The list of loop variable names
+    names: *NameList,
+    /// The list of iterator expressions
+    expressions: std.ArrayList(*Expression),
+    /// The block of statements to execute
+    block: *Block,
+    /// Allocator used for managing the expressions list
+    allocator: std.mem.Allocator,
+
+    /// Clear memory in the ForGenericStatement
+    pub fn deinit(self: *ForGenericStatement) void {
+        self.expressions.deinit(self.allocator);
+    }
+
+    /// Returns the literal text of the 'for' keyword.
+    pub fn tokenLiteral(self: *const ForGenericStatement) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the generic for statement to the given writer.
+    /// Format: "for <names> in <expressions> do <block> end"
+    pub fn write(self: *const ForGenericStatement, writer: *Writer) !void {
+        _ = try writer.writeAll("for ");
+        try self.names.write(writer);
+        _ = try writer.writeAll(" in ");
+
+        // Write comma-separated expression list
+        if (self.expressions.items.len > 0) {
+            var i: usize = 0;
+            while (i < self.expressions.items.len - 1) : (i += 1) {
+                try self.expressions.items[i].write(writer);
+                _ = try writer.writeAll(", ");
+            }
+            try self.expressions.items[i].write(writer);
+        }
+
+        _ = try writer.writeAll(" do ");
+        try self.block.write(writer);
+        _ = try writer.writeAll(" end");
+    }
+};
+
+/// Represents a break statement.
+/// Example: `break`
+pub const BreakStatement = struct {
+    /// The 'break' keyword token
+    token: token.Token,
+
+    /// Returns the literal text of the 'break' keyword.
+    pub fn tokenLiteral(self: *const BreakStatement) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the break statement to the given writer.
+    /// Format: "break"
+    pub fn write(_: *const BreakStatement, writer: *Writer) !void {
+        _ = try writer.writeAll("break");
     }
 };
 
