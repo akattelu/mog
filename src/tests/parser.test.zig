@@ -1548,3 +1548,425 @@ test "while statement - string representation" {
         try std.testing.expectEqualStrings(tc.expected, writer.written());
     }
 }
+
+test "repeat statement - basic structure" {
+    const input = "repeat until x > 10";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Repeat => |repeat_stmt| {
+            try std.testing.expectEqualStrings("repeat", repeat_stmt.tokenLiteral());
+            try std.testing.expectEqual(@as(usize, 0), repeat_stmt.block.statements.len);
+
+            // Verify condition is an infix expression
+            switch (repeat_stmt.condition.*) {
+                .Infix => |infix| {
+                    try std.testing.expectEqualStrings(">", infix.operator);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "repeat statement - with body" {
+    const input = "repeat x = x + 1 until x >= 10";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Repeat => |repeat_stmt| {
+            try std.testing.expectEqualStrings("repeat", repeat_stmt.tokenLiteral());
+            try std.testing.expectEqual(@as(usize, 1), repeat_stmt.block.statements.len);
+
+            // Verify body has assignment
+            switch (repeat_stmt.block.statements[0].*) {
+                .Assignment => |assign| {
+                    try std.testing.expectEqual(false, assign.is_local);
+                    try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+                },
+                else => unreachable,
+            }
+
+            // Verify condition
+            switch (repeat_stmt.condition.*) {
+                .Infix => |infix| {
+                    try std.testing.expectEqualStrings(">=", infix.operator);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "repeat statement - string representation" {
+    const test_cases = .{
+        .{ .input = "repeat until false", .expected = "repeat  until false;" },
+        .{ .input = "repeat x = x + 1 until x >= 10", .expected = "repeat x = (x + 1); until (x >= 10);" },
+        .{ .input = "repeat i = i - 1 local y = i until i == 0", .expected = "repeat i = (i - 1);\nlocal y = i;\n until (i == 0);" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "for numeric statement - basic structure (start, end)" {
+    const input = "for i = 1, 10 do end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .ForNumeric => |for_stmt| {
+            try std.testing.expectEqualStrings("for", for_stmt.tokenLiteral());
+            try std.testing.expectEqualStrings("i", for_stmt.var_name.value);
+            try std.testing.expectEqual(@as(usize, 0), for_stmt.block.statements.len);
+
+            // Verify start expression is integer 1
+            switch (for_stmt.start.*) {
+                .Number => |num| {
+                    switch (num.value) {
+                        .Integer => |int| {
+                            try std.testing.expectEqual(@as(i32, 1), int);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+
+            // Verify end expression is integer 10
+            switch (for_stmt.end.*) {
+                .Number => |num| {
+                    switch (num.value) {
+                        .Integer => |int| {
+                            try std.testing.expectEqual(@as(i32, 10), int);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+
+            // Verify no step expression
+            try std.testing.expectEqual(@as(?*ast.Expression, null), for_stmt.step);
+        },
+        else => unreachable,
+    }
+}
+
+test "for numeric statement - with step" {
+    const input = "for i = 0, 100, 2 do end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .ForNumeric => |for_stmt| {
+            try std.testing.expectEqualStrings("for", for_stmt.tokenLiteral());
+            try std.testing.expectEqualStrings("i", for_stmt.var_name.value);
+
+            // Verify start, end, and step
+            switch (for_stmt.start.*) {
+                .Number => |num| {
+                    switch (num.value) {
+                        .Integer => |int| {
+                            try std.testing.expectEqual(@as(i32, 0), int);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+
+            switch (for_stmt.end.*) {
+                .Number => |num| {
+                    switch (num.value) {
+                        .Integer => |int| {
+                            try std.testing.expectEqual(@as(i32, 100), int);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+
+            // Verify step exists and is 2
+            try std.testing.expect(for_stmt.step != null);
+            switch (for_stmt.step.?.*) {
+                .Number => |num| {
+                    switch (num.value) {
+                        .Integer => |int| {
+                            try std.testing.expectEqual(@as(i32, 2), int);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "for numeric statement - with body" {
+    const input = "for i = 1, 5 do x = x + i end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .ForNumeric => |for_stmt| {
+            try std.testing.expectEqualStrings("i", for_stmt.var_name.value);
+            try std.testing.expectEqual(@as(usize, 1), for_stmt.block.statements.len);
+
+            // Verify the body contains an assignment
+            switch (for_stmt.block.statements[0].*) {
+                .Assignment => |assign| {
+                    try std.testing.expectEqual(false, assign.is_local);
+                    try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "for numeric statement - string representation" {
+    const test_cases = .{
+        .{ .input = "for i = 1, 10 do end", .expected = "for i = 1, 10 do  end;" },
+        .{ .input = "for i = 0, 100, 2 do end", .expected = "for i = 0, 100, 2 do  end;" },
+        .{ .input = "for i = 1, 5 do x = x + i end", .expected = "for i = 1, 5 do x = (x + i); end;" },
+        .{ .input = "for n = 10, 1, -1 do return n end", .expected = "for n = 10, 1, (-1) do return n; end;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "for generic statement - single variable" {
+    const input = "for x in iter do end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .ForGeneric => |for_stmt| {
+            try std.testing.expectEqualStrings("for", for_stmt.tokenLiteral());
+            try std.testing.expectEqual(@as(usize, 0), for_stmt.block.statements.len);
+
+            // Verify single loop variable
+            try std.testing.expectEqual(@as(usize, 1), for_stmt.names.names.items.len);
+            try std.testing.expectEqualStrings("x", for_stmt.names.names.items[0].value);
+
+            // Verify single iterator expression
+            try std.testing.expectEqual(@as(usize, 1), for_stmt.expressions.items.len);
+            switch (for_stmt.expressions.items[0].*) {
+                .Identifier => |ident| {
+                    try std.testing.expectEqualStrings("iter", ident.value);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "for generic statement - multiple variables" {
+    const input = "for k, v in pairs do end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .ForGeneric => |for_stmt| {
+            try std.testing.expectEqualStrings("for", for_stmt.tokenLiteral());
+
+            // Verify two loop variables
+            try std.testing.expectEqual(@as(usize, 2), for_stmt.names.names.items.len);
+            try std.testing.expectEqualStrings("k", for_stmt.names.names.items[0].value);
+            try std.testing.expectEqualStrings("v", for_stmt.names.names.items[1].value);
+
+            // Verify single iterator expression
+            try std.testing.expectEqual(@as(usize, 1), for_stmt.expressions.items.len);
+            switch (for_stmt.expressions.items[0].*) {
+                .Identifier => |ident| {
+                    try std.testing.expectEqualStrings("pairs", ident.value);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "for generic statement - multiple iterator expressions" {
+    const input = "for x in a, b, c do end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .ForGeneric => |for_stmt| {
+            try std.testing.expectEqualStrings("for", for_stmt.tokenLiteral());
+
+            // Verify single loop variable
+            try std.testing.expectEqual(@as(usize, 1), for_stmt.names.names.items.len);
+            try std.testing.expectEqualStrings("x", for_stmt.names.names.items[0].value);
+
+            // Verify three iterator expressions
+            try std.testing.expectEqual(@as(usize, 3), for_stmt.expressions.items.len);
+            switch (for_stmt.expressions.items[0].*) {
+                .Identifier => |ident| {
+                    try std.testing.expectEqualStrings("a", ident.value);
+                },
+                else => unreachable,
+            }
+            switch (for_stmt.expressions.items[1].*) {
+                .Identifier => |ident| {
+                    try std.testing.expectEqualStrings("b", ident.value);
+                },
+                else => unreachable,
+            }
+            switch (for_stmt.expressions.items[2].*) {
+                .Identifier => |ident| {
+                    try std.testing.expectEqualStrings("c", ident.value);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "for generic statement - with body" {
+    const input = "for k, v in pairs do x = v end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .ForGeneric => |for_stmt| {
+            try std.testing.expectEqual(@as(usize, 2), for_stmt.names.names.items.len);
+            try std.testing.expectEqual(@as(usize, 1), for_stmt.block.statements.len);
+
+            // Verify the body contains an assignment
+            switch (for_stmt.block.statements[0].*) {
+                .Assignment => |assign| {
+                    try std.testing.expectEqual(false, assign.is_local);
+                    try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "for generic statement - string representation" {
+    const test_cases = .{
+        .{ .input = "for x in iter do end", .expected = "for x in iter do  end;" },
+        .{ .input = "for k, v in pairs do end", .expected = "for k, v in pairs do  end;" },
+        .{ .input = "for x in a, b, c do end", .expected = "for x in a, b, c do  end;" },
+        .{ .input = "for i, val in items do x = val end", .expected = "for i, val in items do x = val; end;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}

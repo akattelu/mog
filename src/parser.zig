@@ -257,6 +257,12 @@ pub const Parser = struct {
             .t_while => {
                 stmt.* = .{ .While = try self.parseWhileStatement() };
             },
+            .repeat => {
+                stmt.* = .{ .Repeat = try self.parseRepeatStatement() };
+            },
+            .t_for => {
+                return try self.parseForStatement();
+            },
             else => {
                 stmt.* = .{ .Expression = try self.parseExpressionStatement() };
             },
@@ -308,6 +314,169 @@ pub const Parser = struct {
             return ParserError.fail;
         }
         return ws;
+    }
+
+    fn parseRepeatStatement(self: *Parser) !*ast.RepeatStatement {
+        const rs = try self.alloc.allocator().create(ast.RepeatStatement);
+        rs.token = self.current_token.*; // 'repeat' token
+        try self.nextToken(); // move past 'repeat'
+
+        // Parse block until we hit 'until'
+        var block = try self.alloc.allocator().create(ast.Block);
+        var statements = try std.ArrayList(*ast.Statement).initCapacity(self.alloc.allocator(), 8);
+        while (!self.currentTokenIs(.until)) {
+            const stmt = try self.parseStatement();
+            try statements.append(self.alloc.allocator(), stmt);
+            try self.nextToken();
+        }
+        block.statements = statements.items;
+        rs.block = block;
+
+        // We should be at 'until' now
+        if (!self.currentTokenIs(.until)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move past 'until'
+        rs.condition = try self.parseExpression(Precedence.lowest);
+        return rs;
+    }
+
+    /// Parse for statement - dispatches to numeric or generic based on lookahead
+    /// Grammar: for Name '=' exp ',' exp [',' exp] do block end (numeric)
+    ///       OR for namelist in explist do block end (generic)
+    fn parseForStatement(self: *Parser) !*ast.Statement {
+        const for_token = self.current_token.*; // 'for' token
+
+        // Expect identifier after 'for'
+        if (!self.expectAndPeek(.ident)) {
+            return ParserError.fail;
+        }
+        // Now current token is the identifier
+
+        const first_ident = try self.parseIdentifier();
+
+        // Disambiguate: check next token
+        // If '=' -> numeric for
+        // If ',' or 'in' -> generic for
+        if (self.peekTokenIs(.assign)) {
+            return try self.parseForNumericStatement(for_token, first_ident);
+        } else if (self.peekTokenIs(.comma) or self.peekTokenIs(.in)) {
+            return try self.parseForGenericStatement(for_token, first_ident);
+        } else {
+            return ParserError.fail;
+        }
+    }
+
+    /// Parse numeric for statement
+    /// Grammar: for Name '=' exp ',' exp [',' exp] do block end
+    /// first_ident is already parsed
+    fn parseForNumericStatement(self: *Parser, for_token: token.Token, first_ident: *ast.Identifier) !*ast.Statement {
+        const stmt = try self.alloc.allocator().create(ast.Statement);
+        const fns = try self.alloc.allocator().create(ast.ForNumericStatement);
+        fns.token = for_token;
+        fns.var_name = first_ident;
+
+        // Expect '=' after variable name
+        if (!self.expectAndPeek(.assign)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move past '='
+
+        // Parse start expression
+        fns.start = try self.parseExpression(Precedence.lowest);
+
+        // Expect comma after start
+        if (!self.expectAndPeek(.comma)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move past comma
+
+        // Parse end expression
+        fns.end = try self.parseExpression(Precedence.lowest);
+
+        // Check for optional step expression
+        if (self.peekTokenIs(.comma)) {
+            try self.nextToken(); // consume comma
+            try self.nextToken(); // move to step expression
+            fns.step = try self.parseExpression(Precedence.lowest);
+        } else {
+            fns.step = null;
+        }
+
+        // Expect 'do' keyword
+        if (!self.expectAndPeek(.do)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move past 'do'
+
+        // Parse block
+        fns.block = try self.parseBlock();
+
+        // Should be at 'end'
+        if (!self.currentTokenIs(.end)) {
+            return ParserError.fail;
+        }
+
+        stmt.* = .{ .ForNumeric = fns };
+        return stmt;
+    }
+
+    /// Parse generic for statement
+    /// Grammar: for namelist in explist do block end
+    /// first_ident is already parsed
+    fn parseForGenericStatement(self: *Parser, for_token: token.Token, first_ident: *ast.Identifier) !*ast.Statement {
+        const stmt = try self.alloc.allocator().create(ast.Statement);
+        const fgs = try self.alloc.allocator().create(ast.ForGenericStatement);
+        fgs.token = for_token;
+        fgs.allocator = self.alloc.allocator();
+
+        // Create name list starting with first_ident
+        const name_list = try self.alloc.allocator().create(ast.NameList);
+        name_list.* = try ast.NameList.init(self.alloc.allocator(), first_ident);
+
+        // Parse additional identifiers if present (comma-separated)
+        while (self.peekTokenIs(.comma)) {
+            try self.nextToken(); // consume comma
+
+            // Check if next token is 'in' - would be an error
+            if (self.peekTokenIs(.in)) {
+                break; // Will fail on expectAndPeek below
+            }
+
+            if (!self.expectAndPeek(.ident)) {
+                return ParserError.fail;
+            }
+            const next_ident = try self.parseIdentifier();
+            try name_list.add(next_ident);
+        }
+
+        fgs.names = name_list;
+
+        // Expect 'in' keyword
+        if (!self.expectAndPeek(.in)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move past 'in'
+
+        // Parse expression list
+        fgs.expressions = try self.parseExpressionList();
+
+        // Expect 'do' keyword
+        if (!self.expectAndPeek(.do)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move past 'do'
+
+        // Parse block
+        fgs.block = try self.parseBlock();
+
+        // Should be at 'end'
+        if (!self.currentTokenIs(.end)) {
+            return ParserError.fail;
+        }
+
+        stmt.* = .{ .ForGeneric = fgs };
+        return stmt;
     }
 
     fn parseAssignmentStatement(self: *Parser, is_local: bool) !*ast.AssignmentStatement {
@@ -570,6 +739,27 @@ pub const Parser = struct {
         }
 
         return param_list;
+    }
+
+    /// Parse a comma-separated list of expressions
+    /// Grammar: exp {',' exp}
+    /// Returns an ArrayList of expressions
+    fn parseExpressionList(self: *Parser) !std.ArrayList(*ast.Expression) {
+        var expressions = try std.ArrayList(*ast.Expression).initCapacity(self.alloc.allocator(), 4);
+
+        // Parse first expression
+        const first_expr = try self.parseExpression(Precedence.lowest);
+        try expressions.append(self.alloc.allocator(), first_expr);
+
+        // Parse additional comma-separated expressions
+        while (self.peekTokenIs(.comma)) {
+            try self.nextToken(); // consume comma
+            try self.nextToken(); // move to next expression
+            const expr = try self.parseExpression(Precedence.lowest);
+            try expressions.append(self.alloc.allocator(), expr);
+        }
+
+        return expressions;
     }
 
     /// Parse a function body
