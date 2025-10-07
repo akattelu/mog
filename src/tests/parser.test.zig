@@ -1375,3 +1375,176 @@ test "function declaration - string representation" {
         try std.testing.expectEqualStrings(tc.expected, writer.written());
     }
 }
+
+test "do statement - empty block" {
+    const input = "do end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Do => |do_stmt| {
+            try std.testing.expectEqualStrings("do", do_stmt.tokenLiteral());
+            try std.testing.expectEqual(@as(usize, 0), do_stmt.block.statements.len);
+        },
+        else => unreachable,
+    }
+}
+
+test "do statement - with statements" {
+    const input = "do local x = 5 x = x + 1 end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Do => |do_stmt| {
+            try std.testing.expectEqualStrings("do", do_stmt.tokenLiteral());
+            try std.testing.expectEqual(@as(usize, 2), do_stmt.block.statements.len);
+
+            // First statement should be local assignment
+            switch (do_stmt.block.statements[0].*) {
+                .Assignment => |assign| {
+                    try std.testing.expectEqual(true, assign.is_local);
+                    try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+                },
+                else => unreachable,
+            }
+
+            // Second statement should be non-local assignment
+            switch (do_stmt.block.statements[1].*) {
+                .Assignment => |assign| {
+                    try std.testing.expectEqual(false, assign.is_local);
+                    try std.testing.expectEqualStrings("x", assign.names.names.items[0].value);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "do statement - string representation" {
+    const test_cases = .{
+        .{ .input = "do end", .expected = "do  end;" },
+        .{ .input = "do local x = 5 end", .expected = "do local x = 5; end;" },
+        .{ .input = "do x = 1 y = 2 end", .expected = "do x = 1;\ny = 2;\n end;" },
+        .{ .input = "do return 42 end", .expected = "do return 42; end;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "while statement - basic structure" {
+    const input = "while x < 10 do end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .While => |while_stmt| {
+            try std.testing.expectEqualStrings("while", while_stmt.tokenLiteral());
+            try std.testing.expectEqual(@as(usize, 0), while_stmt.block.statements.len);
+
+            // Verify condition is an infix expression
+            switch (while_stmt.condition.*) {
+                .Infix => |infix| {
+                    try std.testing.expectEqualStrings("<", infix.operator);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "while statement - with body" {
+    const input = "while true do x = x + 1 end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .While => |while_stmt| {
+            try std.testing.expectEqualStrings("while", while_stmt.tokenLiteral());
+            try std.testing.expectEqual(@as(usize, 1), while_stmt.block.statements.len);
+
+            // Verify condition is a boolean
+            switch (while_stmt.condition.*) {
+                .Boolean => |bool_expr| {
+                    try std.testing.expectEqual(true, bool_expr.value);
+                },
+                else => unreachable,
+            }
+
+            // Verify body has assignment
+            switch (while_stmt.block.statements[0].*) {
+                .Assignment => |assign| {
+                    try std.testing.expectEqual(false, assign.is_local);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "while statement - string representation" {
+    const test_cases = .{
+        .{ .input = "while true do end", .expected = "while true do  end;" },
+        .{ .input = "while x < 10 do x = x + 1 end", .expected = "while (x < 10) do x = (x + 1); end;" },
+        .{ .input = "while i > 0 do i = i - 1 return i end", .expected = "while (i > 0) do i = (i - 1);\nreturn i;\n end;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}

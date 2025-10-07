@@ -251,6 +251,12 @@ pub const Parser = struct {
             .t_return => {
                 stmt.* = .{ .Return = try self.parseReturnStatement() };
             },
+            .do => {
+                stmt.* = .{ .Do = try self.parseDoStatement() };
+            },
+            .t_while => {
+                stmt.* = .{ .While = try self.parseWhileStatement() };
+            },
             else => {
                 stmt.* = .{ .Expression = try self.parseExpressionStatement() };
             },
@@ -272,6 +278,36 @@ pub const Parser = struct {
             try self.nextToken();
         }
         return rs;
+    }
+
+    fn parseDoStatement(self: *Parser) !*ast.DoStatement {
+        const ds = try self.alloc.allocator().create(ast.DoStatement);
+        ds.token = self.current_token.*; // 'do' token
+        try self.nextToken(); // move past 'do'
+        ds.block = try self.parseBlock();
+        // parseBlock leaves us at 'end'
+        if (!self.currentTokenIs(.end)) {
+            return ParserError.fail;
+        }
+        return ds;
+    }
+
+    fn parseWhileStatement(self: *Parser) !*ast.WhileStatement {
+        const ws = try self.alloc.allocator().create(ast.WhileStatement);
+        ws.token = self.current_token.*; // 'while' token
+        try self.nextToken(); // move past 'while'
+        ws.condition = try self.parseExpression(Precedence.lowest);
+        // Expect 'do' after condition
+        if (!self.expectAndPeek(.do)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move past 'do'
+        ws.block = try self.parseBlock();
+        // parseBlock leaves us at 'end'
+        if (!self.currentTokenIs(.end)) {
+            return ParserError.fail;
+        }
+        return ws;
     }
 
     fn parseAssignmentStatement(self: *Parser, is_local: bool) !*ast.AssignmentStatement {
