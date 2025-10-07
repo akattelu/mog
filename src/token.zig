@@ -1,5 +1,7 @@
 const std = @import("std");
 const Writer = std.Io.Writer;
+///
+/// Enum of all the different token types
 pub const TokenType = enum {
     illegal,
     eof,
@@ -98,6 +100,7 @@ pub const TokenType = enum {
     }
 };
 
+/// Represents a token produced by the Lexer corresponding to a piece of syntax
 pub const Token = struct {
     type: TokenType,
     literal: []const u8,

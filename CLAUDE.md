@@ -79,12 +79,21 @@ zig build install-git-hooks
 
 ### Testing
 
-All core modules include comprehensive unit tests:
-- Lexer: Token generation, position tracking
-- Parser: Statement parsing, expression parsing, operator precedence
-- AST: String representation via `write()` methods
+Tests are organized in `src/tests/` directory with separate files for each module:
+- `src/tests/lexer.test.zig`: Token generation, position tracking
+- `src/tests/parser.test.zig`: Statement parsing, expression parsing, operator precedence
+- `src/tests/ast.test.zig`: String representation via `write()` methods
+- `src/tests/token.test.zig`: Token type and keyword mapping tests
 
-Run individual module tests by examining test blocks in each file.
+**Important**: To prevent Zig's dead code elimination from removing test files, they are explicitly referenced in `src/main.zig` (lines 15-18) as public declarations:
+```zig
+pub const parser_tests = @import("tests/parser.test.zig");
+pub const lexer_tests = @import("tests/lexer.test.zig");
+pub const token_tests = @import("tests/token.test.zig");
+pub const ast_tests = @import("tests/ast.test.zig");
+```
+
+Additionally, `src/main.zig` includes a test block that references all declarations (`std.testing.refAllDecls(@This())`) to ensure test discovery.
 
 ## Development Notes
 
