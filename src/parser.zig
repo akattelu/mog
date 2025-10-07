@@ -220,11 +220,25 @@ pub const Parser = struct {
         return program;
     }
 
-    fn parseStatement(self: *Parser) !*ast.Statement {
+    fn parseStatement(self: *Parser) SuperError!*ast.Statement {
         const stmt = try self.alloc.allocator().create(ast.Statement);
         switch (self.current_token.type) {
             .local => {
-                stmt.* = .{ .Assignment = try self.parseAssignmentStatement(true) };
+                if (self.peekTokenIs(.ident)) {
+                    stmt.* = .{ .Assignment = try self.parseAssignmentStatement(true) };
+                } else if (self.peekTokenIs(.function)) {
+                    stmt.* = .{ .FunctionDeclaration = try self.parseFunctionDeclaration(true) };
+                } else {
+                    return ParserError.fail;
+                }
+            },
+            .function => {
+                // Check if next token is identifier (function declaration) or '(' (function expression)
+                if (self.peekTokenIs(.ident)) {
+                    stmt.* = .{ .FunctionDeclaration = try self.parseFunctionDeclaration(false) };
+                } else {
+                    stmt.* = .{ .Expression = try self.parseExpressionStatement() };
+                }
             },
             .ident => {
                 // Look ahead to determine if this is an assignment or expression
@@ -570,5 +584,30 @@ pub const Parser = struct {
 
         expr.* = .{ .FunctionDef = func_def };
         return expr;
+    }
+
+    /// Parse a function decl
+    fn parseFunctionDeclaration(self: *Parser, is_local: bool) !*ast.FunctionDeclaration {
+        const func = try self.alloc.allocator().create(ast.FunctionDeclaration);
+
+        func.is_local = is_local;
+
+        // If local, current is 'local', need to advance to 'function'
+        if (is_local) {
+            try self.nextToken();
+        }
+
+        func.token = self.current_token.*; // 'function' token
+
+        // Advance to identifier
+        try self.nextToken();
+
+        // parse name
+        func.name = try self.parseIdentifier();
+
+        // parse body
+        func.body = try self.parseFunctionBody();
+
+        return func;
     }
 };

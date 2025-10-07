@@ -5,7 +5,7 @@ const AllocatorError = std.mem.Allocator.Error;
 const testing = std.testing;
 
 /// The different types of statements in the AST.
-pub const StatementTypes = enum { Assignment, Return, Expression };
+pub const StatementTypes = enum { Assignment, Return, Expression, FunctionDeclaration };
 
 // Numbers can be integers or floats
 pub const NumberType = enum { Integer, Float };
@@ -16,6 +16,7 @@ pub const Statement = union(StatementTypes) {
     Assignment: *AssignmentStatement,
     Return: *ReturnStatement,
     Expression: *ExpressionStatement,
+    FunctionDeclaration: *FunctionDeclaration,
 
     /// Returns the literal text of the first token in this statement.
     /// Useful for debugging and error messages.
@@ -24,6 +25,7 @@ pub const Statement = union(StatementTypes) {
             .Assignment => |n| return n.tokenLiteral(),
             .Return => |n| return n.tokenLiteral(),
             .Expression => |n| return n.tokenLiteral(),
+            .FunctionDeclaration => |n| return n.tokenLiteral(),
         }
     }
 
@@ -34,6 +36,7 @@ pub const Statement = union(StatementTypes) {
             .Assignment => |n| try n.write(writer),
             .Return => |n| try n.write(writer),
             .Expression => |n| try n.write(writer),
+            .FunctionDeclaration => |n| try n.write(writer),
         }
         _ = try writer.writeAll(";");
     }
@@ -555,6 +558,34 @@ pub const FunctionDefExpression = struct {
     }
 };
 
+/// Represents a function declaration
+/// Different from the expression variant because its a statement and has a name in the declaration
+/// Contains an optional `local` keyword
+pub const FunctionDeclaration = struct {
+    /// 'function' keyword token
+    token: token.Token,
+    /// Whether or not `local` was used in this declaration
+    is_local: bool,
+    /// Function name (arguably this should just be a string)
+    name: *Identifier,
+    /// Body
+    body: *FunctionBody,
+
+    /// Returns the literal text of the 'function' keyword
+    pub fn tokenLiteral(self: *const FunctionDeclaration) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the function definition to writer
+    pub fn write(self: *const FunctionDeclaration, writer: *Writer) !void {
+        if (self.is_local) {
+            try writer.writeAll("local ");
+        }
+        try writer.print("function {s}", .{self.name.value});
+        try self.body.write(writer);
+    }
+};
+
 /// Represents the root node of the AST, containing all top-level statements.
 /// A Program is essentially a collection of statements that make up the source code.
 pub const Program = struct {
@@ -574,7 +605,7 @@ pub const Program = struct {
     /// Writes the program to the given writer in valid source code format.
     /// Single-statement programs are written inline; multi-statement programs
     /// have each statement on its own line.
-    pub fn write(self: *const Program, writer: *Writer) !void {
+    pub fn write(self: *const Program, writer: *Writer) std.Io.Writer.Error!void {
         if (self.statements.len == 1) {
             try self.statements[0].write(writer);
         } else {

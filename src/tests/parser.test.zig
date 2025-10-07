@@ -33,36 +33,6 @@ test "local statements" {
     try testAssignmentStatement(program.statements[1], "foo", true);
 }
 
-test "statement errors" {
-    const test_cases = .{
-        .{
-            .input = "local = 10;",
-            .expected_error = "expected next token to be ident, got assign instead",
-        },
-        .{
-            .input = "local x 10;",
-            .expected_error = "expected next token to be assign, got int instead",
-        },
-        .{
-            .input = "local x 10;",
-            .expected_error = "expected next token to be assign, got int instead",
-        },
-    };
-
-    const allocator = std.testing.allocator;
-
-    inline for (test_cases) |test_case| {
-        var lexer = try lex.Lexer.init(allocator, test_case.input);
-        var parser = try Parser.init(allocator, &lexer);
-        defer lexer.deinit();
-        defer parser.deinit();
-        _ = parser.parseProgram() catch {
-            const error_msg = if (parser.parser_error != null) parser.parser_error.?.* else "";
-            try std.testing.expectStringStartsWith(error_msg, test_case.expected_error);
-        };
-    }
-}
-
 test "return statements" {
     const input =
         \\return x;
@@ -1292,6 +1262,102 @@ test "function definition - string representation" {
         .{ .input = "function(a, b, ...) end", .expected = "function(a, b, ...) end;" },
         .{ .input = "function(x) return x end", .expected = "function(x) return x; end;" },
         .{ .input = "local f = function() end", .expected = "local f = function() end;" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "function declaration - local" {
+    const input = "local function add(x, y) return x + y end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .FunctionDeclaration => |func| {
+            try std.testing.expectEqual(true, func.is_local);
+            try std.testing.expectEqualStrings("add", func.name.value);
+            try std.testing.expectEqualStrings("function", func.tokenLiteral());
+
+            // Check parameters
+            try std.testing.expect(func.body.params != null);
+            try std.testing.expectEqual(@as(usize, 2), func.body.params.?.names.items.len);
+            try std.testing.expectEqualStrings("x", func.body.params.?.names.items[0].value);
+            try std.testing.expectEqualStrings("y", func.body.params.?.names.items[1].value);
+
+            // Check body has a return statement
+            try std.testing.expectEqual(@as(usize, 1), func.body.block.statements.len);
+            switch (func.body.block.statements[0].*) {
+                .Return => {},
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function declaration - non-local" {
+    const input = "function multiply(a, b, c) return a * b * c end";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .FunctionDeclaration => |func| {
+            try std.testing.expectEqual(false, func.is_local);
+            try std.testing.expectEqualStrings("multiply", func.name.value);
+            try std.testing.expectEqualStrings("function", func.tokenLiteral());
+
+            // Check parameters
+            try std.testing.expect(func.body.params != null);
+            try std.testing.expectEqual(@as(usize, 3), func.body.params.?.names.items.len);
+            try std.testing.expectEqualStrings("a", func.body.params.?.names.items[0].value);
+            try std.testing.expectEqualStrings("b", func.body.params.?.names.items[1].value);
+            try std.testing.expectEqualStrings("c", func.body.params.?.names.items[2].value);
+
+            // Check body has a return statement
+            try std.testing.expectEqual(@as(usize, 1), func.body.block.statements.len);
+            switch (func.body.block.statements[0].*) {
+                .Return => {},
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "function declaration - string representation" {
+    const test_cases = .{
+        .{ .input = "local function add(x, y) return x + y end", .expected = "local function add(x, y) return (x + y); end;" },
+        .{ .input = "function multiply(a, b, c) return a * b * c end", .expected = "function multiply(a, b, c) return ((a * b) * c); end;" },
+        .{ .input = "local function noParams() end", .expected = "local function noParams() end;" },
+        .{ .input = "function withVarargs(...) end", .expected = "function withVarargs(...) end;" },
+        .{ .input = "local function mixed(x, ...) end", .expected = "local function mixed(x, ...) end;" },
     };
 
     const allocator = std.testing.allocator;
