@@ -17,6 +17,7 @@ const Command = *const fn (args: *std.process.ArgIterator) CommandErrUnion!u8;
 const command_map = std.StaticStringMap(Command).initComptime(.{
     .{ "repl", &repl },
     .{ "parse", &parse_file },
+    .{ "help", &help },
 });
 
 pub fn main() !void {
@@ -38,6 +39,33 @@ pub fn main() !void {
 
     if (ret == 0) process.cleanExit();
     process.exit(ret);
+}
+
+pub fn help(args: *std.process.ArgIterator) CommandErrUnion!u8 {
+    _ = args;
+
+    const help_text =
+        \\mog - A Lua-based language utility toolkit
+        \\
+        \\USAGE:
+        \\  mog <command> [options]
+        \\
+        \\COMMANDS:
+        \\  help                 Show this help message
+        \\  repl --lex           Start REPL in lexer mode (tokenization only)
+        \\  repl --parse         Start REPL in parser mode (full parsing)
+        \\  parse <file>         Parse a Lua file and output the AST
+        \\
+        \\EXAMPLES:
+        \\  mog help
+        \\  mog repl --lex
+        \\  mog repl --parse
+        \\  mog parse script.lua
+        \\
+    ;
+
+    print("{s}", .{help_text});
+    return 0;
 }
 
 pub fn repl(args: *std.process.ArgIterator) CommandErrUnion!u8 {
