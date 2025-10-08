@@ -10,7 +10,7 @@ test "basic write without indentation" {
 
     try pp.write("hello world");
 
-    try std.testing.expectEqualStrings("hello world\n", writer.written());
+    try std.testing.expectEqualStrings("hello world", writer.written());
 }
 
 test "write with single indent level" {
@@ -23,7 +23,20 @@ test "write with single indent level" {
     pp.indent();
     try pp.write("indented line");
 
-    try std.testing.expectEqualStrings("  indented line\n", writer.written());
+    try std.testing.expectEqualStrings("  indented line", writer.written());
+}
+
+test "print with single indent level" {
+    const allocator = std.testing.allocator;
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+
+    var pp = PrettyPrinter.init(&writer.writer);
+
+    pp.indent();
+    try pp.print("{s} {d}\n", .{ "hello", 10 });
+
+    try std.testing.expectEqualStrings("  hello 10\n", writer.written());
 }
 
 test "write with multiple indent levels" {
@@ -39,7 +52,7 @@ test "write with multiple indent levels" {
     try pp.write("deeply nested");
 
     // 3 levels * 2 spaces = 6 spaces
-    try std.testing.expectEqualStrings("      deeply nested\n", writer.written());
+    try std.testing.expectEqualStrings("      deeply nested", writer.written());
 }
 
 test "indent and dedent cycling" {
@@ -50,14 +63,19 @@ test "indent and dedent cycling" {
     var pp = PrettyPrinter.init(&writer.writer);
 
     try pp.write("no indent");
+    try pp.nl();
     pp.indent();
     try pp.write("one level");
+    try pp.nl();
     pp.indent();
     try pp.write("two levels");
+    try pp.nl();
     pp.dedent();
     try pp.write("back to one");
+    try pp.nl();
     pp.dedent();
     try pp.write("back to zero");
+    try pp.nl();
 
     const expected =
         \\no indent
@@ -84,7 +102,7 @@ test "dedent below zero stays at zero" {
     pp.dedent();
     try pp.write("still at zero");
 
-    try std.testing.expectEqualStrings("still at zero\n", writer.written());
+    try std.testing.expectEqualStrings("still at zero", writer.written());
 }
 
 test "partial dedent when indent is less than INDENT_SPACES" {
@@ -99,7 +117,7 @@ test "partial dedent when indent is less than INDENT_SPACES" {
     pp.dedent();
     try pp.write("reset to zero");
 
-    try std.testing.expectEqualStrings("reset to zero\n", writer.written());
+    try std.testing.expectEqualStrings("reset to zero", writer.written());
 }
 
 test "newline output" {
@@ -111,7 +129,9 @@ test "newline output" {
 
     try pp.write("line 1");
     try pp.nl();
+    try pp.nl();
     try pp.write("line 2");
+    try pp.nl();
 
     const expected =
         \\line 1
@@ -131,16 +151,22 @@ test "mixed indentation and newlines" {
     var pp = PrettyPrinter.init(&writer.writer);
 
     try pp.write("function example()");
+    try pp.nl();
     pp.indent();
     try pp.write("local x = 10");
     try pp.nl();
+    try pp.nl();
     try pp.write("if x > 5 then");
+    try pp.nl();
     pp.indent();
     try pp.write("print(x)");
+    try pp.nl();
     pp.dedent();
     try pp.write("end");
+    try pp.nl();
     pp.dedent();
     try pp.write("end");
+    try pp.nl();
 
     const expected =
         \\function example()
@@ -166,7 +192,7 @@ test "empty string write" {
     pp.indent();
     try pp.write("");
 
-    try std.testing.expectEqualStrings("  \n", writer.written());
+    try std.testing.expectEqualStrings("  ", writer.written());
 }
 
 test "unicode content handling" {
@@ -179,7 +205,7 @@ test "unicode content handling" {
     pp.indent();
     try pp.write("hello 世界 🌍");
 
-    try std.testing.expectEqualStrings("  hello 世界 🌍\n", writer.written());
+    try std.testing.expectEqualStrings("  hello 世界 🌍", writer.written());
 }
 
 test "multiple consecutive newlines" {
@@ -193,7 +219,9 @@ test "multiple consecutive newlines" {
     try pp.nl();
     try pp.nl();
     try pp.nl();
+    try pp.nl();
     try pp.write("end");
+    try pp.nl();
 
     const expected =
         \\start

@@ -33,15 +33,19 @@ pub const PrettyPrinter = struct {
     /// Write contents to the pretty printer with the current indentation
     pub fn write(self: *PrettyPrinter, content: []const u8) Writer.Error!void {
         // Write indentation spaces
-        var i: u32 = 0;
-        while (i < self.current_indent) : (i += 1) {
-            try self.writer.writeByte(' ');
-        }
-        try self.writer.print("{s}\n", .{content});
+        _ = try self.writer.splatByte(' ', self.current_indent);
+        try self.writer.print("{s}", .{content});
     }
 
     /// Write a newline to the pretty printer
     pub fn nl(self: *PrettyPrinter) Writer.Error!void {
         try self.writer.writeByte('\n');
+    }
+
+    /// Write contents to the pretty printer with the current indentation
+    pub fn print(self: *PrettyPrinter, comptime fmt: []const u8, args: anytype) Writer.Error!void {
+        // Write indentation spaces
+        _ = try self.writer.splatByte(' ', self.current_indent);
+        try self.writer.print(fmt, args);
     }
 };
