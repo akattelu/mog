@@ -365,7 +365,7 @@ pub const BreakStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor };
+pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
@@ -381,6 +381,8 @@ pub const Expression = union(ExpressionTypes) {
     Varargs: *Varargs,
     FunctionDef: *FunctionDefExpression,
     TableConstructor: *TableConstructor,
+    Index: *IndexExpression,
+    Member: *MemberExpression,
 
     /// Returns the literal text of the first token in this expression.
     /// Useful for debugging and error messages.
@@ -397,6 +399,8 @@ pub const Expression = union(ExpressionTypes) {
             .Varargs => |n| n.tokenLiteral(),
             .FunctionDef => |n| n.tokenLiteral(),
             .TableConstructor => |n| n.tokenLiteral(),
+            .Index => |n| n.tokenLiteral(),
+            .Member => |n| n.tokenLiteral(),
         };
     }
 
@@ -415,6 +419,8 @@ pub const Expression = union(ExpressionTypes) {
             .Varargs => |n| try n.write(writer),
             .FunctionDef => |n| try n.write(writer),
             .TableConstructor => |n| try n.write(writer),
+            .Index => |n| try n.write(writer),
+            .Member => |n| try n.write(writer),
         }
     }
 };
@@ -465,6 +471,55 @@ pub const InfixExpression = struct {
         _ = try writer.writeAll(" ");
         try self.right.write(writer);
         _ = try writer.writeAll(")");
+    }
+};
+
+/// Represents an index access expression.
+/// Example: `t[1]`, `arr[i + 1]`, `matrix[x][y]`
+pub const IndexExpression = struct {
+    /// The opening bracket token
+    token: token.Token,
+    /// The expression being indexed (left side)
+    object: *Expression,
+    /// The index expression (inside brackets)
+    index: *Expression,
+
+    /// Returns the literal text of the opening bracket token.
+    pub fn tokenLiteral(self: *const IndexExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the index expression to the given writer.
+    /// Format: "<object>[<index>]"
+    pub fn write(self: *const IndexExpression, writer: *Writer) !void {
+        try self.object.write(writer);
+        _ = try writer.writeAll("[");
+        try self.index.write(writer);
+        _ = try writer.writeAll("]");
+    }
+};
+
+/// Represents a member access expression.
+/// Example: `t.x`, `obj.field`, `foo.bar.baz`
+pub const MemberExpression = struct {
+    /// The dot token
+    token: token.Token,
+    /// The expression being accessed (left side)
+    object: *Expression,
+    /// The field name being accessed
+    field: *Identifier,
+
+    /// Returns the literal text of the dot token.
+    pub fn tokenLiteral(self: *const MemberExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the member expression to the given writer.
+    /// Format: "<object>.<field>"
+    pub fn write(self: *const MemberExpression, writer: *Writer) !void {
+        try self.object.write(writer);
+        _ = try writer.writeAll(".");
+        try self.field.write(writer);
     }
 };
 

@@ -61,6 +61,8 @@ pub const Parser = struct {
             .{ "percent", Precedence.product },
             .{ "caret", Precedence.exponent },
             .{ "lparen", Precedence.call },
+            .{ "lbracket", Precedence.call },
+            .{ "dot", Precedence.call },
         });
 
         fn ofToken(t: TokenType) Precedence {
@@ -95,6 +97,9 @@ pub const Parser = struct {
         .{ "rshift", &parseInfixExpression },
         // String concatenation
         .{ "dotdot", &parseInfixExpression },
+        // Index and member access
+        .{ "lbracket", &parseIndexExpression },
+        .{ "dot", &parseMemberExpression },
     });
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
         // Literals
@@ -571,6 +576,50 @@ pub const Parser = struct {
         infix_expr.right = try self.parseExpression(right_prec);
 
         expr.* = .{ .Infix = infix_expr };
+        return expr;
+    }
+
+    fn parseIndexExpression(self: *Parser, left: *ast.Expression) SuperError!*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const index_expr = try self.alloc.allocator().create(ast.IndexExpression);
+
+        index_expr.token = self.current_token.*;
+        index_expr.object = left;
+
+        // Move past the '['
+        try self.nextToken();
+
+        // Parse the index expression
+        index_expr.index = try self.parseExpression(.lowest);
+
+        // Expect closing ']'
+        if (!self.expectAndPeek(.rbracket)) {
+            return ParserError.fail;
+        }
+
+        expr.* = .{ .Index = index_expr };
+        return expr;
+    }
+
+    fn parseMemberExpression(self: *Parser, left: *ast.Expression) SuperError!*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const member_expr = try self.alloc.allocator().create(ast.MemberExpression);
+
+        member_expr.token = self.current_token.*;
+        member_expr.object = left;
+
+        // Expect identifier after dot
+        if (!self.expectAndPeek(.ident)) {
+            return ParserError.fail;
+        }
+
+        // Parse the field name as an identifier
+        const field = try self.alloc.allocator().create(ast.Identifier);
+        field.token = self.current_token.*;
+        field.value = self.current_token.literal;
+        member_expr.field = field;
+
+        expr.* = .{ .Member = member_expr };
         return expr;
     }
 

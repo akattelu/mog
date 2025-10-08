@@ -2316,3 +2316,156 @@ test "table constructor - in assignment" {
         else => unreachable,
     }
 }
+
+test "index expression - basic" {
+    const input = "t[1]";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("t[1];", writer.written());
+}
+
+test "index expression - with expression" {
+    const input = "arr[i + 1]";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("arr[(i + 1)];", writer.written());
+}
+
+test "member expression - basic" {
+    const input = "t.x";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("t.x;", writer.written());
+}
+
+test "member expression - chained" {
+    const input = "obj.foo.bar";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("obj.foo.bar;", writer.written());
+}
+
+test "index and member expression - chained" {
+    const input = "t.foo[0].bar";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("t.foo[0].bar;", writer.written());
+}
+
+test "index expression - nested" {
+    const input = "matrix[x][y]";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("matrix[x][y];", writer.written());
+}
+
+test "index expression - precedence with multiplication" {
+    const input = "t[0] * 2";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("(t[0] * 2);", writer.written());
+}
+
+test "member expression - precedence with addition" {
+    const input = "obj.x + 5";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("(obj.x + 5);", writer.written());
+}
+
+test "index and member - complex chain" {
+    const input = "a[1].b[2].c";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("a[1].b[2].c;", writer.written());
+}
