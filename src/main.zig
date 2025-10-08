@@ -182,9 +182,11 @@ test {
     const lexer_tests = @import("tests/lexer.test.zig");
     const token_tests = @import("tests/token.test.zig");
     const ast_tests = @import("tests/ast.test.zig");
+    const pretty_printer_tests = @import("tests/pretty_printer.test.zig");
 
     std.testing.refAllDecls(token_tests);
     std.testing.refAllDecls(lexer_tests);
     std.testing.refAllDecls(parser_tests);
     std.testing.refAllDecls(ast_tests);
+    std.testing.refAllDecls(pretty_printer_tests);
 }
