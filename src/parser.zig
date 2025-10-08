@@ -63,6 +63,9 @@ pub const Parser = struct {
             .{ "lparen", Precedence.call },
             .{ "lbracket", Precedence.call },
             .{ "dot", Precedence.call },
+            .{ "colon", Precedence.call },
+            .{ "lbrace", Precedence.call },
+            .{ "string", Precedence.call },
         });
 
         fn ofToken(t: TokenType) Precedence {
@@ -100,6 +103,11 @@ pub const Parser = struct {
         // Index and member access
         .{ "lbracket", &parseIndexExpression },
         .{ "dot", &parseMemberExpression },
+        // Function calls
+        .{ "lparen", &parseFunctionCall },
+        .{ "colon", &parseMethodCall },
+        .{ "lbrace", &parseFunctionCall }, // Table constructor as call argument
+        .{ "string", &parseFunctionCall }, // String literal as call argument
     });
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
         // Literals
@@ -990,6 +998,93 @@ pub const Parser = struct {
         }
 
         expr.* = .{ .TableConstructor = table };
+        return expr;
+    }
+
+    /// Parse function call arguments
+    /// Grammar: '(' [explist] ')' | tableconstructor | LiteralString
+    /// Current token should be the opening '(', '{', or string
+    fn parseArgs(self: *Parser) !ast.CallArgs {
+        if (self.currentTokenIs(.lparen)) {
+            // Parse expression list in parentheses
+            try self.nextToken(); // move past '('
+
+            // Check for empty argument list
+            if (self.currentTokenIs(.rparen)) {
+                return ast.CallArgs{ .ExpressionList = try std.ArrayList(*ast.Expression).initCapacity(self.alloc.allocator(), 0) };
+            }
+
+            // Parse expression list
+            const exprs = try self.parseExpressionList();
+
+            // Expect closing paren
+            if (!self.expectAndPeek(.rparen)) {
+                return ParserError.fail;
+            }
+
+            return ast.CallArgs{ .ExpressionList = exprs };
+        } else if (self.currentTokenIs(.lbrace)) {
+            // Parse table constructor
+            const table_expr = try self.parseTableConstructor();
+            // parseTableConstructor returns an Expression, extract the TableConstructor
+            return ast.CallArgs{ .TableConstructor = table_expr.TableConstructor };
+        } else if (self.currentTokenIs(.string)) {
+            // Parse string literal
+            const str = try self.alloc.allocator().create(ast.StringLiteral);
+            str.token = self.current_token.*;
+            const len = self.current_token.end_pos - self.current_token.start_pos;
+            str.value = self.current_token.literal[1..len];
+            return ast.CallArgs{ .StringLiteral = str };
+        } else {
+            return ParserError.fail;
+        }
+    }
+
+    /// Parse a function call expression (infix operator)
+    /// Grammar: prefixexp args
+    /// Current token is '(' when this is called
+    fn parseFunctionCall(self: *Parser, left: *ast.Expression) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const call = try self.alloc.allocator().create(ast.FunctionCallExpression);
+
+        call.token = self.current_token.*; // '(', '{', or string token
+        call.function = left;
+        call.args = try self.parseArgs();
+
+        expr.* = .{ .FunctionCall = call };
+        return expr;
+    }
+
+    /// Parse a method call expression (infix operator)
+    /// Grammar: prefixexp ':' Name args
+    /// Current token is ':' when this is called
+    fn parseMethodCall(self: *Parser, left: *ast.Expression) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const call = try self.alloc.allocator().create(ast.MethodCallExpression);
+
+        call.token = self.current_token.*; // ':' token
+        call.object = left;
+
+        // Expect identifier after ':'
+        if (!self.expectAndPeek(.ident)) {
+            return ParserError.fail;
+        }
+
+        // Parse method name
+        const method = try self.alloc.allocator().create(ast.Identifier);
+        method.token = self.current_token.*;
+        method.value = self.current_token.literal;
+        call.method = method;
+
+        // Expect args after method name (can be '(', '{', or string)
+        if (!self.peekTokenIs(.lparen) and !self.peekTokenIs(.lbrace) and !self.peekTokenIs(.string)) {
+            return ParserError.fail;
+        }
+        try self.nextToken(); // move to args token
+
+        call.args = try self.parseArgs();
+
+        expr.* = .{ .MethodCall = call };
         return expr;
     }
 };

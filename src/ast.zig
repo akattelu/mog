@@ -365,7 +365,7 @@ pub const BreakStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member };
+pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member, FunctionCall, MethodCall };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
@@ -383,6 +383,8 @@ pub const Expression = union(ExpressionTypes) {
     TableConstructor: *TableConstructor,
     Index: *IndexExpression,
     Member: *MemberExpression,
+    FunctionCall: *FunctionCallExpression,
+    MethodCall: *MethodCallExpression,
 
     /// Returns the literal text of the first token in this expression.
     /// Useful for debugging and error messages.
@@ -401,6 +403,8 @@ pub const Expression = union(ExpressionTypes) {
             .TableConstructor => |n| n.tokenLiteral(),
             .Index => |n| n.tokenLiteral(),
             .Member => |n| n.tokenLiteral(),
+            .FunctionCall => |n| n.tokenLiteral(),
+            .MethodCall => |n| n.tokenLiteral(),
         };
     }
 
@@ -421,6 +425,8 @@ pub const Expression = union(ExpressionTypes) {
             .TableConstructor => |n| try n.write(writer),
             .Index => |n| try n.write(writer),
             .Member => |n| try n.write(writer),
+            .FunctionCall => |n| try n.write(writer),
+            .MethodCall => |n| try n.write(writer),
         }
     }
 };
@@ -520,6 +526,87 @@ pub const MemberExpression = struct {
         try self.object.write(writer);
         _ = try writer.writeAll(".");
         try self.field.write(writer);
+    }
+};
+
+/// Represents the different types of function call arguments
+pub const CallArgsType = enum { ExpressionList, TableConstructor, StringLiteral };
+
+/// Represents the arguments to a function call
+/// Can be: (explist), {table}, or "string"
+pub const CallArgs = union(CallArgsType) {
+    ExpressionList: std.ArrayList(*Expression),
+    TableConstructor: *TableConstructor,
+    StringLiteral: *StringLiteral,
+
+    /// Writes the call arguments to the given writer
+    pub fn write(self: *const CallArgs, writer: *Writer) !void {
+        switch (self.*) {
+            .ExpressionList => |exprs| {
+                _ = try writer.writeAll("(");
+                if (exprs.items.len > 0) {
+                    var i: usize = 0;
+                    while (i < exprs.items.len - 1) : (i += 1) {
+                        try exprs.items[i].write(writer);
+                        _ = try writer.writeAll(", ");
+                    }
+                    try exprs.items[i].write(writer);
+                }
+                _ = try writer.writeAll(")");
+            },
+            .TableConstructor => |table| try table.write(writer),
+            .StringLiteral => |str| try str.write(writer),
+        }
+    }
+};
+
+/// Represents a function call expression.
+/// Example: `foo()`, `print("hello")`, `func{x = 1}`
+pub const FunctionCallExpression = struct {
+    /// The opening paren, brace, or string token
+    token: token.Token,
+    /// The function expression being called
+    function: *Expression,
+    /// The arguments
+    args: CallArgs,
+
+    /// Returns the literal text of the token
+    pub fn tokenLiteral(self: *const FunctionCallExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the function call to the given writer.
+    /// Format: "<function><args>"
+    pub fn write(self: *const FunctionCallExpression, writer: *Writer) !void {
+        try self.function.write(writer);
+        try self.args.write(writer);
+    }
+};
+
+/// Represents a method call expression.
+/// Example: `obj:method()`, `t:fn"string"`, `x:y{1, 2}`
+pub const MethodCallExpression = struct {
+    /// The colon token
+    token: token.Token,
+    /// The object expression
+    object: *Expression,
+    /// The method name
+    method: *Identifier,
+    /// The arguments
+    args: CallArgs,
+
+    /// Returns the literal text of the colon token
+    pub fn tokenLiteral(self: *const MethodCallExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the method call to the given writer.
+    /// Format: "<object>:<method><args>"
+    pub fn write(self: *const MethodCallExpression, writer: *Writer) !void {
+        try self.object.write(writer);
+        _ = try writer.writeAll(":");
+        try self.method.write(writer);
+        try self.args.write(writer);
     }
 };
 

@@ -2469,3 +2469,207 @@ test "index and member - complex chain" {
     try program.write(&writer.writer);
     try std.testing.expectEqualStrings("a[1].b[2].c;", writer.written());
 }
+
+test "function call - no arguments" {
+    const input = "foo()";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("foo();", writer.written());
+}
+
+test "function call - single argument" {
+    const input = "print(42)";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("print(42);", writer.written());
+}
+
+test "function call - multiple arguments" {
+    const input = "add(1, 2, 3)";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("add(1, 2, 3);", writer.written());
+}
+
+test "function call - string literal argument" {
+    const input = "print \"hello\"";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("print\"hello\";", writer.written());
+}
+
+test "function call - table constructor argument" {
+    const input = "config {x = 1, y = 2}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("config{x = 1, y = 2};", writer.written());
+}
+
+test "method call - no arguments" {
+    const input = "obj:method()";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("obj:method();", writer.written());
+}
+
+test "method call - with arguments" {
+    const input = "obj:fn(1, 2)";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("obj:fn(1, 2);", writer.written());
+}
+
+test "method call - string argument" {
+    const input = "obj:log\"error\"";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("obj:log\"error\";", writer.written());
+}
+
+test "function call - chained calls" {
+    const input = "foo()()";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("foo()();", writer.written());
+}
+
+test "function call - complex expression" {
+    const input = "add(x + 1, y * 2)";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("add((x + 1), (y * 2));", writer.written());
+}
+
+test "function call - mixed with member access" {
+    const input = "obj.method(42)";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("obj.method(42);", writer.written());
+}
+
+test "function call - mixed with index access" {
+    const input = "funcs[1](x)";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("funcs[1](x);", writer.written());
+}
