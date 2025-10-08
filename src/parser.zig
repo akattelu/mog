@@ -273,7 +273,7 @@ pub const Parser = struct {
     fn parseReturnStatement(self: *Parser) !*ast.ReturnStatement {
         const rs = try self.alloc.allocator().create(ast.ReturnStatement);
         rs.token = self.current_token.*;
-        if (self.peekTokenIs(TokenType.semicolon)) {
+        if (self.peekTokenIs(.semicolon) or self.peekTokenIs(.end)) {
             rs.expr = null;
             try self.nextToken();
             return rs;
