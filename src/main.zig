@@ -11,12 +11,6 @@ const Parser = @import("parser.zig").Parser;
 const ParserError = @import("parser.zig").Parser.ParserError;
 pub const token = @import("token.zig");
 
-// Test declaration references
-pub const parser_tests = @import("tests/parser.test.zig");
-pub const lexer_tests = @import("tests/lexer.test.zig");
-pub const token_tests = @import("tests/token.test.zig");
-pub const ast_tests = @import("tests/ast.test.zig");
-
 pub fn main() !void {
     // Read command line arguments and skip the first one
     var args = try process.argsWithAllocator(std.heap.page_allocator);
@@ -100,5 +94,14 @@ pub fn main() !void {
 }
 
 test {
-    std.testing.refAllDecls(@This());
+    // Test declaration references
+    const parser_tests = @import("tests/parser.test.zig");
+    const lexer_tests = @import("tests/lexer.test.zig");
+    const token_tests = @import("tests/token.test.zig");
+    const ast_tests = @import("tests/ast.test.zig");
+
+    std.testing.refAllDecls(token_tests);
+    std.testing.refAllDecls(lexer_tests);
+    std.testing.refAllDecls(parser_tests);
+    std.testing.refAllDecls(ast_tests);
 }
