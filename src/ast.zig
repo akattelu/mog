@@ -365,7 +365,7 @@ pub const BreakStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef };
+pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
@@ -380,6 +380,7 @@ pub const Expression = union(ExpressionTypes) {
     Nil: *Nil,
     Varargs: *Varargs,
     FunctionDef: *FunctionDefExpression,
+    TableConstructor: *TableConstructor,
 
     /// Returns the literal text of the first token in this expression.
     /// Useful for debugging and error messages.
@@ -395,6 +396,7 @@ pub const Expression = union(ExpressionTypes) {
             .Nil => |n| n.tokenLiteral(),
             .Varargs => |n| n.tokenLiteral(),
             .FunctionDef => |n| n.tokenLiteral(),
+            .TableConstructor => |n| n.tokenLiteral(),
         };
     }
 
@@ -412,6 +414,7 @@ pub const Expression = union(ExpressionTypes) {
             .Nil => |n| try n.write(writer),
             .Varargs => |n| try n.write(writer),
             .FunctionDef => |n| try n.write(writer),
+            .TableConstructor => |n| try n.write(writer),
         }
     }
 };
@@ -629,6 +632,91 @@ pub const Varargs = struct {
     /// Writes the varargs to the given writer as "...".
     pub fn write(_: *const Varargs, writer: *Writer) !void {
         try writer.print("...", .{});
+    }
+};
+
+/// The different types of table fields
+pub const FieldType = enum { ArrayStyle, RecordStyle, ComputedKey };
+
+/// Represents a single field in a table constructor
+/// Three variants based on Lua syntax:
+/// - ArrayStyle: just an expression (e.g., `42` in `{42, 43}`)
+/// - RecordStyle: name = expr (e.g., `x = 10` in `{x = 10}`)
+/// - ComputedKey: [expr] = expr (e.g., `[key] = val` in `{[key] = val}`)
+pub const Field = union(FieldType) {
+    ArrayStyle: *Expression,
+    RecordStyle: struct {
+        name: *Identifier,
+        value: *Expression,
+    },
+    ComputedKey: struct {
+        key: *Expression,
+        value: *Expression,
+    },
+
+    /// Returns the literal text of the first token in this field
+    pub fn tokenLiteral(self: *const Field) []const u8 {
+        return switch (self.*) {
+            .ArrayStyle => |expr| expr.tokenLiteral(),
+            .RecordStyle => |record| record.name.tokenLiteral(),
+            .ComputedKey => |computed| computed.key.tokenLiteral(),
+        };
+    }
+
+    /// Writes the field to the given writer
+    pub fn write(self: *const Field, writer: *Writer) !void {
+        switch (self.*) {
+            .ArrayStyle => |expr| try expr.write(writer),
+            .RecordStyle => |record| {
+                try record.name.write(writer);
+                _ = try writer.writeAll(" = ");
+                try record.value.write(writer);
+            },
+            .ComputedKey => |computed| {
+                _ = try writer.writeAll("[");
+                try computed.key.write(writer);
+                _ = try writer.writeAll("] = ");
+                try computed.value.write(writer);
+            },
+        }
+    }
+};
+
+/// Represents a table constructor literal
+/// Example: `{}`, `{1, 2, 3}`, `{x = 10, y = 20}`, `{[key] = value}`
+pub const TableConstructor = struct {
+    /// The opening brace token
+    token: token.Token,
+    /// List of fields in the table
+    fields: std.ArrayList(*Field),
+    /// Allocator used for managing the fields list
+    allocator: std.mem.Allocator,
+
+    /// Clear memory in the TableConstructor
+    pub fn deinit(self: *TableConstructor) void {
+        self.fields.deinit(self.allocator);
+    }
+
+    /// Returns the literal text of the opening brace token
+    pub fn tokenLiteral(self: *const TableConstructor) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the table constructor to the given writer
+    /// Format: "{[field][, field]*}"
+    pub fn write(self: *const TableConstructor, writer: *Writer) !void {
+        _ = try writer.writeAll("{");
+
+        if (self.fields.items.len > 0) {
+            var i: usize = 0;
+            while (i < self.fields.items.len - 1) : (i += 1) {
+                try self.fields.items[i].write(writer);
+                _ = try writer.writeAll(", ");
+            }
+            try self.fields.items[i].write(writer);
+        }
+
+        _ = try writer.writeAll("}");
     }
 };
 

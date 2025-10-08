@@ -1970,3 +1970,349 @@ test "for generic statement - string representation" {
         try std.testing.expectEqualStrings(tc.expected, writer.written());
     }
 }
+
+test "table constructor - empty table" {
+    const input = "{}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |expr_stmt| {
+            switch (expr_stmt.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 0), table.fields.items.len);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "table constructor - array style fields" {
+    const input = "{1, 2, 3}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |expr_stmt| {
+            switch (expr_stmt.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 3), table.fields.items.len);
+
+                    // Check all fields are array style
+                    for (table.fields.items) |field| {
+                        switch (field.*) {
+                            .ArrayStyle => {},
+                            else => unreachable,
+                        }
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "table constructor - record style fields" {
+    const input = "{x = 10, y = 20}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |expr_stmt| {
+            switch (expr_stmt.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 2), table.fields.items.len);
+
+                    // Check first field
+                    switch (table.fields.items[0].*) {
+                        .RecordStyle => |record| {
+                            try std.testing.expectEqualStrings("x", record.name.value);
+                        },
+                        else => unreachable,
+                    }
+
+                    // Check second field
+                    switch (table.fields.items[1].*) {
+                        .RecordStyle => |record| {
+                            try std.testing.expectEqualStrings("y", record.name.value);
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "table constructor - computed key fields" {
+    const input = "{[key] = value}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |expr_stmt| {
+            switch (expr_stmt.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 1), table.fields.items.len);
+
+                    // Check field is computed key
+                    switch (table.fields.items[0].*) {
+                        .ComputedKey => |computed| {
+                            // Verify key is identifier
+                            switch (computed.key.*) {
+                                .Identifier => |ident| {
+                                    try std.testing.expectEqualStrings("key", ident.value);
+                                },
+                                else => unreachable,
+                            }
+                            // Verify value is identifier
+                            switch (computed.value.*) {
+                                .Identifier => |ident| {
+                                    try std.testing.expectEqualStrings("value", ident.value);
+                                },
+                                else => unreachable,
+                            }
+                        },
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "table constructor - mixed field types" {
+    const input = "{1, x = 2, [y] = 3}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |expr_stmt| {
+            switch (expr_stmt.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 3), table.fields.items.len);
+
+                    // Check first field is array style
+                    switch (table.fields.items[0].*) {
+                        .ArrayStyle => {},
+                        else => unreachable,
+                    }
+
+                    // Check second field is record style
+                    switch (table.fields.items[1].*) {
+                        .RecordStyle => |record| {
+                            try std.testing.expectEqualStrings("x", record.name.value);
+                        },
+                        else => unreachable,
+                    }
+
+                    // Check third field is computed key
+                    switch (table.fields.items[2].*) {
+                        .ComputedKey => {},
+                        else => unreachable,
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "table constructor - with semicolon separators" {
+    const input = "{1; 2; 3}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |expr_stmt| {
+            switch (expr_stmt.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 3), table.fields.items.len);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "table constructor - with trailing separator" {
+    const test_cases = .{
+        "{1, 2, 3,}",
+        "{1, 2, 3;}",
+        "{x = 1, y = 2,}",
+        "{x = 1; y = 2;}",
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |input| {
+        var lexer = try lex.Lexer.init(allocator, input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+        try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+        switch (program.statements[0].*) {
+            .Expression => |expr_stmt| {
+                switch (expr_stmt.expr.*) {
+                    .TableConstructor => |table| {
+                        // Should have parsed fields correctly despite trailing separator
+                        try std.testing.expect(table.fields.items.len > 0);
+                    },
+                    else => unreachable,
+                }
+            },
+            else => unreachable,
+        }
+    }
+}
+
+test "table constructor - nested tables" {
+    const input = "{{1, 2}, {3, 4}}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Expression => |expr_stmt| {
+            switch (expr_stmt.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 2), table.fields.items.len);
+
+                    // Check both fields are array style containing tables
+                    for (table.fields.items) |field| {
+                        switch (field.*) {
+                            .ArrayStyle => |array_expr| {
+                                switch (array_expr.*) {
+                                    .TableConstructor => |inner_table| {
+                                        try std.testing.expectEqual(@as(usize, 2), inner_table.fields.items.len);
+                                    },
+                                    else => unreachable,
+                                }
+                            },
+                            else => unreachable,
+                        }
+                    }
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}
+
+test "table constructor - string representation" {
+    const test_cases = .{
+        .{ .input = "{}", .expected = "{};" },
+        .{ .input = "{1, 2, 3}", .expected = "{1, 2, 3};" },
+        .{ .input = "{x = 10, y = 20}", .expected = "{x = 10, y = 20};" },
+        .{ .input = "{[key] = val}", .expected = "{[key] = val};" },
+        .{ .input = "{[1+2] = 3}", .expected = "{[(1 + 2)] = 3};" },
+        .{ .input = "{1, x = 2, [y] = 3}", .expected = "{1, x = 2, [y] = 3};" },
+        .{ .input = "{{1, 2}, {3, 4}}", .expected = "{{1, 2}, {3, 4}};" },
+        // With trailing separators
+        .{ .input = "{1, 2, 3,}", .expected = "{1, 2, 3};" },
+        .{ .input = "{1, 2, 3;}", .expected = "{1, 2, 3};" },
+    };
+
+    const allocator = std.testing.allocator;
+    inline for (test_cases) |tc| {
+        var lexer = try lex.Lexer.init(allocator, tc.input);
+        var parser = try Parser.init(allocator, &lexer);
+        defer lexer.deinit();
+        defer parser.deinit();
+        const program = try parser.parseProgram();
+        try assertNoErrors(&parser);
+
+        var writer = std.Io.Writer.Allocating.init(allocator);
+        defer writer.deinit();
+        try program.write(&writer.writer);
+        try std.testing.expectEqualStrings(tc.expected, writer.written());
+    }
+}
+
+test "table constructor - in assignment" {
+    const input = "local t = {1, 2, 3}";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+
+    switch (program.statements[0].*) {
+        .Assignment => |assign| {
+            try std.testing.expect(assign.is_local);
+            try std.testing.expectEqualStrings("t", assign.names.names.items[0].value);
+
+            switch (assign.expr.*) {
+                .TableConstructor => |table| {
+                    try std.testing.expectEqual(@as(usize, 3), table.fields.items.len);
+                },
+                else => unreachable,
+            }
+        },
+        else => unreachable,
+    }
+}

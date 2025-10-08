@@ -206,3 +206,295 @@ test "ForGenericStatement Writer" {
     try for_stmt_single.write(&writer.writer);
     try testing.expectEqualStrings("for k, v in pairs, t do  end", writer.written());
 }
+
+test "TableConstructor Writer - Empty Table" {
+    const alloc = testing.allocator;
+
+    // Create empty table
+    var table = ast.TableConstructor{
+        .token = token.Token{ .type = .lbrace, .literal = "{", .start_pos = 0, .end_pos = 1 },
+        .fields = try std.ArrayList(*ast.Field).initCapacity(alloc, 0),
+        .allocator = alloc,
+    };
+    defer table.deinit();
+
+    // Initialize writer
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    try table.write(&writer.writer);
+    try testing.expectEqualStrings("{}", writer.written());
+}
+
+test "TableConstructor Writer - Array Style Fields" {
+    const alloc = testing.allocator;
+
+    // Create number expressions
+    const num1_lit = try alloc.create(ast.NumberLiteral);
+    defer alloc.destroy(num1_lit);
+    num1_lit.* = .{
+        .token = token.Token{ .type = .int, .literal = "1", .start_pos = 0, .end_pos = 1 },
+        .value = .{ .Integer = 1 },
+    };
+    const num1_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(num1_expr);
+    num1_expr.* = .{ .Number = num1_lit };
+
+    const num2_lit = try alloc.create(ast.NumberLiteral);
+    defer alloc.destroy(num2_lit);
+    num2_lit.* = .{
+        .token = token.Token{ .type = .int, .literal = "2", .start_pos = 0, .end_pos = 1 },
+        .value = .{ .Integer = 2 },
+    };
+    const num2_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(num2_expr);
+    num2_expr.* = .{ .Number = num2_lit };
+
+    const num3_lit = try alloc.create(ast.NumberLiteral);
+    defer alloc.destroy(num3_lit);
+    num3_lit.* = .{
+        .token = token.Token{ .type = .int, .literal = "3", .start_pos = 0, .end_pos = 1 },
+        .value = .{ .Integer = 3 },
+    };
+    const num3_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(num3_expr);
+    num3_expr.* = .{ .Number = num3_lit };
+
+    // Create array-style fields
+    const field1 = try alloc.create(ast.Field);
+    defer alloc.destroy(field1);
+    field1.* = .{ .ArrayStyle = num1_expr };
+
+    const field2 = try alloc.create(ast.Field);
+    defer alloc.destroy(field2);
+    field2.* = .{ .ArrayStyle = num2_expr };
+
+    const field3 = try alloc.create(ast.Field);
+    defer alloc.destroy(field3);
+    field3.* = .{ .ArrayStyle = num3_expr };
+
+    // Create table with fields
+    var fields = try std.ArrayList(*ast.Field).initCapacity(alloc, 3);
+    defer fields.deinit(alloc);
+    try fields.append(alloc, field1);
+    try fields.append(alloc, field2);
+    try fields.append(alloc, field3);
+
+    var table = ast.TableConstructor{
+        .token = token.Token{ .type = .lbrace, .literal = "{", .start_pos = 0, .end_pos = 1 },
+        .fields = fields,
+        .allocator = alloc,
+    };
+
+    // Initialize writer
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    try table.write(&writer.writer);
+    try testing.expectEqualStrings("{1, 2, 3}", writer.written());
+}
+
+test "TableConstructor Writer - Record Style Fields" {
+    const alloc = testing.allocator;
+
+    // Create identifier for x
+    const x_ident = try alloc.create(ast.Identifier);
+    defer alloc.destroy(x_ident);
+    x_ident.* = .{
+        .token = token.Token{ .type = .ident, .literal = "x", .start_pos = 0, .end_pos = 1 },
+        .value = "x",
+    };
+
+    // Create value expression for x (10)
+    const x_val_lit = try alloc.create(ast.NumberLiteral);
+    defer alloc.destroy(x_val_lit);
+    x_val_lit.* = .{
+        .token = token.Token{ .type = .int, .literal = "10", .start_pos = 0, .end_pos = 2 },
+        .value = .{ .Integer = 10 },
+    };
+    const x_val_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(x_val_expr);
+    x_val_expr.* = .{ .Number = x_val_lit };
+
+    // Create identifier for y
+    const y_ident = try alloc.create(ast.Identifier);
+    defer alloc.destroy(y_ident);
+    y_ident.* = .{
+        .token = token.Token{ .type = .ident, .literal = "y", .start_pos = 0, .end_pos = 1 },
+        .value = "y",
+    };
+
+    // Create value expression for y (20)
+    const y_val_lit = try alloc.create(ast.NumberLiteral);
+    defer alloc.destroy(y_val_lit);
+    y_val_lit.* = .{
+        .token = token.Token{ .type = .int, .literal = "20", .start_pos = 0, .end_pos = 2 },
+        .value = .{ .Integer = 20 },
+    };
+    const y_val_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(y_val_expr);
+    y_val_expr.* = .{ .Number = y_val_lit };
+
+    // Create record-style fields
+    const field1 = try alloc.create(ast.Field);
+    defer alloc.destroy(field1);
+    field1.* = .{ .RecordStyle = .{ .name = x_ident, .value = x_val_expr } };
+
+    const field2 = try alloc.create(ast.Field);
+    defer alloc.destroy(field2);
+    field2.* = .{ .RecordStyle = .{ .name = y_ident, .value = y_val_expr } };
+
+    // Create table with fields
+    var fields = try std.ArrayList(*ast.Field).initCapacity(alloc, 2);
+    defer fields.deinit(alloc);
+    try fields.append(alloc, field1);
+    try fields.append(alloc, field2);
+
+    var table = ast.TableConstructor{
+        .token = token.Token{ .type = .lbrace, .literal = "{", .start_pos = 0, .end_pos = 1 },
+        .fields = fields,
+        .allocator = alloc,
+    };
+
+    // Initialize writer
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    try table.write(&writer.writer);
+    try testing.expectEqualStrings("{x = 10, y = 20}", writer.written());
+}
+
+test "TableConstructor Writer - Computed Key Fields" {
+    const alloc = testing.allocator;
+
+    // Create key expression (identifier "key")
+    const key_ident = try alloc.create(ast.Identifier);
+    defer alloc.destroy(key_ident);
+    key_ident.* = .{
+        .token = token.Token{ .type = .ident, .literal = "key", .start_pos = 0, .end_pos = 3 },
+        .value = "key",
+    };
+    const key_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(key_expr);
+    key_expr.* = .{ .Identifier = key_ident };
+
+    // Create value expression (string "value")
+    const val_lit = try alloc.create(ast.StringLiteral);
+    defer alloc.destroy(val_lit);
+    val_lit.* = .{
+        .token = token.Token{ .type = .string, .literal = "\"value\"", .start_pos = 0, .end_pos = 7 },
+        .value = "value",
+    };
+    const val_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(val_expr);
+    val_expr.* = .{ .String = val_lit };
+
+    // Create computed-key field
+    const field = try alloc.create(ast.Field);
+    defer alloc.destroy(field);
+    field.* = .{ .ComputedKey = .{ .key = key_expr, .value = val_expr } };
+
+    // Create table with field
+    var fields = try std.ArrayList(*ast.Field).initCapacity(alloc, 1);
+    defer fields.deinit(alloc);
+    try fields.append(alloc, field);
+
+    var table = ast.TableConstructor{
+        .token = token.Token{ .type = .lbrace, .literal = "{", .start_pos = 0, .end_pos = 1 },
+        .fields = fields,
+        .allocator = alloc,
+    };
+
+    // Initialize writer
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    try table.write(&writer.writer);
+    try testing.expectEqualStrings("{[key] = \"value\"}", writer.written());
+}
+
+test "TableConstructor Writer - Mixed Field Types" {
+    const alloc = testing.allocator;
+
+    // Create array-style field (42)
+    const num_lit = try alloc.create(ast.NumberLiteral);
+    defer alloc.destroy(num_lit);
+    num_lit.* = .{
+        .token = token.Token{ .type = .int, .literal = "42", .start_pos = 0, .end_pos = 2 },
+        .value = .{ .Integer = 42 },
+    };
+    const num_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(num_expr);
+    num_expr.* = .{ .Number = num_lit };
+
+    const field1 = try alloc.create(ast.Field);
+    defer alloc.destroy(field1);
+    field1.* = .{ .ArrayStyle = num_expr };
+
+    // Create record-style field (name = "test")
+    const name_ident = try alloc.create(ast.Identifier);
+    defer alloc.destroy(name_ident);
+    name_ident.* = .{
+        .token = token.Token{ .type = .ident, .literal = "name", .start_pos = 0, .end_pos = 4 },
+        .value = "name",
+    };
+
+    const name_val_lit = try alloc.create(ast.StringLiteral);
+    defer alloc.destroy(name_val_lit);
+    name_val_lit.* = .{
+        .token = token.Token{ .type = .string, .literal = "\"test\"", .start_pos = 0, .end_pos = 6 },
+        .value = "test",
+    };
+    const name_val_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(name_val_expr);
+    name_val_expr.* = .{ .String = name_val_lit };
+
+    const field2 = try alloc.create(ast.Field);
+    defer alloc.destroy(field2);
+    field2.* = .{ .RecordStyle = .{ .name = name_ident, .value = name_val_expr } };
+
+    // Create computed-key field ([1] = true)
+    const key_num_lit = try alloc.create(ast.NumberLiteral);
+    defer alloc.destroy(key_num_lit);
+    key_num_lit.* = .{
+        .token = token.Token{ .type = .int, .literal = "1", .start_pos = 0, .end_pos = 1 },
+        .value = .{ .Integer = 1 },
+    };
+    const key_num_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(key_num_expr);
+    key_num_expr.* = .{ .Number = key_num_lit };
+
+    const bool_lit = try alloc.create(ast.BooleanLiteral);
+    defer alloc.destroy(bool_lit);
+    bool_lit.* = .{
+        .token = token.Token{ .type = .true, .literal = "true", .start_pos = 0, .end_pos = 4 },
+        .value = true,
+    };
+    const bool_expr = try alloc.create(ast.Expression);
+    defer alloc.destroy(bool_expr);
+    bool_expr.* = .{ .Boolean = bool_lit };
+
+    const field3 = try alloc.create(ast.Field);
+    defer alloc.destroy(field3);
+    field3.* = .{ .ComputedKey = .{ .key = key_num_expr, .value = bool_expr } };
+
+    // Create table with all three field types
+    var fields = try std.ArrayList(*ast.Field).initCapacity(alloc, 3);
+    defer fields.deinit(alloc);
+    try fields.append(alloc, field1);
+    try fields.append(alloc, field2);
+    try fields.append(alloc, field3);
+
+    var table = ast.TableConstructor{
+        .token = token.Token{ .type = .lbrace, .literal = "{", .start_pos = 0, .end_pos = 1 },
+        .fields = fields,
+        .allocator = alloc,
+    };
+
+    // Initialize writer
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    try table.write(&writer.writer);
+    try testing.expectEqualStrings("{42, name = \"test\", [1] = true}", writer.written());
+}

@@ -115,6 +115,8 @@ pub const Parser = struct {
         .{ "t_if", &parseConditionalExpression },
         // Function definitions
         .{ "function", &parseFunctionDefExpression },
+        // Table constructors
+        .{ "lbrace", &parseTableConstructor },
         // Grouping
         .{ "lparen", &parseParenthesizedExpression },
     });
@@ -835,5 +837,110 @@ pub const Parser = struct {
         func.body = try self.parseFunctionBody();
 
         return func;
+    }
+
+    /// Parse a single field in a table constructor
+    /// Grammar: '[' exp ']' '=' exp | Name '=' exp | exp
+    /// Disambiguates based on current token:
+    /// - '[' -> ComputedKey
+    /// - ident + '=' -> RecordStyle
+    /// - otherwise -> ArrayStyle
+    fn parseField(self: *Parser) !*ast.Field {
+        const field = try self.alloc.allocator().create(ast.Field);
+
+        // Check for computed key: [expr] = expr
+        if (self.currentTokenIs(.lbracket)) {
+            try self.nextToken(); // move past '['
+            const key_expr = try self.parseExpression(Precedence.lowest);
+
+            // Expect ']'
+            if (!self.expectAndPeek(.rbracket)) {
+                return ParserError.fail;
+            }
+
+            // Expect '='
+            if (!self.expectAndPeek(.assign)) {
+                return ParserError.fail;
+            }
+            try self.nextToken(); // move past '='
+
+            const value_expr = try self.parseExpression(Precedence.lowest);
+            field.* = .{ .ComputedKey = .{ .key = key_expr, .value = value_expr } };
+            return field;
+        }
+
+        // Check for record style: Name = exp
+        // Need to peek ahead to see if there's an '=' after an identifier
+        if (self.currentTokenIs(.ident) and self.peekTokenIs(.assign)) {
+            const name = try self.parseIdentifier();
+            try self.nextToken(); // move to '='
+            try self.nextToken(); // move past '='
+
+            const value_expr = try self.parseExpression(Precedence.lowest);
+            field.* = .{ .RecordStyle = .{ .name = name, .value = value_expr } };
+            return field;
+        }
+
+        // Otherwise it's array style: just an expression
+        const expr = try self.parseExpression(Precedence.lowest);
+        field.* = .{ .ArrayStyle = expr };
+        return field;
+    }
+
+    /// Parse a field list (comma or semicolon separated fields with optional trailing separator)
+    /// Grammar: field {fieldsep field} [fieldsep]
+    /// Returns an ArrayList of fields
+    fn parseFieldList(self: *Parser) !std.ArrayList(*ast.Field) {
+        var fields = try std.ArrayList(*ast.Field).initCapacity(self.alloc.allocator(), 4);
+
+        // Parse first field
+        const first_field = try self.parseField();
+        try fields.append(self.alloc.allocator(), first_field);
+
+        // Parse additional fields separated by comma or semicolon
+        while (self.peekTokenIs(.comma) or self.peekTokenIs(.semicolon)) {
+            try self.nextToken(); // consume separator
+
+            // Check for closing brace (trailing separator case)
+            if (self.peekTokenIs(.rbrace)) {
+                break;
+            }
+
+            try self.nextToken(); // move to next field
+            const field = try self.parseField();
+            try fields.append(self.alloc.allocator(), field);
+        }
+
+        return fields;
+    }
+
+    /// Parse a table constructor expression
+    /// Grammar: '{' [fieldlist] '}'
+    fn parseTableConstructor(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const table = try self.alloc.allocator().create(ast.TableConstructor);
+
+        table.token = self.current_token.*; // '{' token
+        table.allocator = self.alloc.allocator();
+
+        // Check for empty table
+        if (self.peekTokenIs(.rbrace)) {
+            table.fields = try std.ArrayList(*ast.Field).initCapacity(self.alloc.allocator(), 0);
+            try self.nextToken(); // move to '}'
+            expr.* = .{ .TableConstructor = table };
+            return expr;
+        }
+
+        // Parse field list
+        try self.nextToken(); // move past '{'
+        table.fields = try self.parseFieldList();
+
+        // Expect closing brace
+        if (!self.expectAndPeek(.rbrace)) {
+            return ParserError.fail;
+        }
+
+        expr.* = .{ .TableConstructor = table };
+        return expr;
     }
 };
