@@ -115,7 +115,7 @@ pub const Lexer = struct {
 
     /// Retrieves the next valid token in the input buffer
     /// Returns LexError.Illegal for illegal characters
-    pub fn nextToken(self: *Lexer) !*Token {
+    pub fn nextToken(self: *Lexer) (std.mem.Allocator.Error || LexError)!*Token {
         var tokType: TokenType = TokenType.illegal;
         var literal: []const u8 = "";
         self.skipWhitespace();

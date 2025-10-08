@@ -7,9 +7,17 @@ const StreamError = std.Io.Reader.StreamError;
 
 pub const ast = @import("ast.zig");
 pub const Lexer = @import("lexer.zig").Lexer;
-const Parser = @import("parser.zig").Parser;
-const ParserError = @import("parser.zig").Parser.ParserError;
+const p = @import("parser.zig");
+const Parser = p.Parser;
+const ParserError = p.Parser.ParserError;
 pub const token = @import("token.zig");
+
+const CommandErrUnion = (std.mem.Allocator.Error || std.Io.Writer.Error || Lexer.LexError || ParserError || std.fmt.ParseIntError || std.fs.File.OpenError || std.Io.Reader.Error);
+const Command = *const fn (args: *std.process.ArgIterator) CommandErrUnion!u8;
+const command_map = std.StaticStringMap(Command).initComptime(.{
+    .{ "repl", &repl },
+    .{ "parse", &parse_file },
+});
 
 pub fn main() !void {
     // Read command line arguments and skip the first one
@@ -18,10 +26,21 @@ pub fn main() !void {
     const first_arg = args.next();
 
     // Ignore non-"repl" arguments
-    if (first_arg == null or !(std.mem.eql(u8, first_arg.?, "repl"))) {
+    if (first_arg == null) {
         process.exit(1);
     }
 
+    const command = command_map.get(first_arg.?);
+    if (command == null) {
+        process.exit(1);
+    }
+    const ret = try command.?(&args);
+
+    if (ret == 0) process.cleanExit();
+    process.exit(ret);
+}
+
+pub fn repl(args: *std.process.ArgIterator) CommandErrUnion!u8 {
     const mode = args.next();
     if (mode == null or (!(std.mem.eql(u8, mode.?, "--lex")) and !(std.mem.eql(u8, mode.?, "--parse")))) {
         process.exit(1);
@@ -85,12 +104,48 @@ pub fn main() !void {
 
         // Error is thrown by `streamDelimiter` when end of stream is reached (Ctrl+D)
         StreamError.EndOfStream => {
-            process.cleanExit();
+            return 0;
         },
         else => {
             print("error: {any}", .{err});
         },
     }
+    return 0;
+}
+
+pub fn parse_file(args: *std.process.ArgIterator) CommandErrUnion!u8 {
+    const file_name = args.next();
+
+    if (file_name == null) {
+        return 1;
+    }
+
+    // Open file
+    const file_handle = try std.fs.cwd().openFile(file_name.?, .{});
+    const stat = try file_handle.stat();
+    const file_size = stat.size;
+
+    // Read contents
+    var input_buffer: [2048]u8 = undefined;
+    var reader = file_handle.reader(&input_buffer);
+    const alloc = std.heap.smp_allocator;
+    const file_data = try reader.interface.readAlloc(alloc, file_size);
+
+    // Create and run parser
+    var lexer = try Lexer.init(alloc, file_data);
+    var parser = try Parser.init(alloc, &lexer);
+    const program = try parser.parseProgram();
+
+    // Create stdout writer
+    var output_buffer: [1028]u8 = undefined;
+    const stdout = std.fs.File.stdout();
+    var writer = stdout.writer(&output_buffer);
+
+    // Write to stdodut
+    try program.write(&writer.interface);
+    try writer.interface.flush();
+
+    return 0;
 }
 
 test {
