@@ -1,5 +1,6 @@
 const std = @import("std");
 const token = @import("token.zig");
+const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
 const Writer = std.Io.Writer;
 const AllocatorError = std.mem.Allocator.Error;
 const testing = std.testing;
@@ -43,7 +44,7 @@ pub const Statement = union(StatementTypes) {
 
     /// Writes the statement to the given writer in valid source code format.
     /// All statements are terminated with a semicolon.
-    pub fn write(self: *const Statement, writer: *Writer) !void {
+    pub fn write(self: *const Statement, writer: *Writer) Writer.Error!void {
         switch (self.*) {
             .Assignment => |n| try n.write(writer),
             .Return => |n| try n.write(writer),
@@ -57,6 +58,23 @@ pub const Statement = union(StatementTypes) {
             .Break => |n| try n.write(writer),
         }
         _ = try writer.writeAll(";");
+    }
+
+    /// Pretty prints the statement
+    pub fn pretty(self: *const Statement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("");
+        switch (self.*) {
+            .Assignment => |n| try n.pretty(pp),
+            .Return => |n| try n.pretty(pp),
+            .Expression => |n| try n.pretty(pp),
+            .FunctionDeclaration => |n| try n.pretty(pp),
+            .Do => |n| try n.pretty(pp),
+            .While => |n| try n.pretty(pp),
+            .Repeat => |n| try n.pretty(pp),
+            .ForNumeric => |n| try n.pretty(pp),
+            .ForGeneric => |n| try n.pretty(pp),
+            .Break => |n| try n.pretty(pp),
+        }
     }
 };
 
@@ -75,10 +93,18 @@ pub const ReturnStatement = struct {
 
     /// Writes the return statement to the given writer.
     /// Format: "return <expr>" or "return" if expr is null.
-    pub fn write(self: *const ReturnStatement, writer: *Writer) !void {
+    pub fn write(self: *const ReturnStatement, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("return ");
         if (self.expr != null) {
             try self.expr.?.write(writer);
+        }
+    }
+
+    /// Pretty prints the return statement
+    pub fn pretty(self: *const ReturnStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("return ");
+        if (self.expr != null) {
+            try self.expr.?.pretty(pp);
         }
     }
 };
@@ -102,13 +128,25 @@ pub const AssignmentStatement = struct {
 
     /// Writes the assignment statement to the given writer.
     /// Format: "[local] <names> = <expr>"
-    pub fn write(self: *const AssignmentStatement, writer: *Writer) !void {
+    pub fn write(self: *const AssignmentStatement, writer: *Writer) Writer.Error!void {
         if (self.is_local) {
             _ = try writer.writeAll("local ");
         }
         try self.names.write(writer);
         _ = try writer.writeAll(" = ");
         try self.expr.write(writer);
+    }
+
+    /// Pretty prints the assignment statement
+    pub fn pretty(self: *const AssignmentStatement, pp: *PrettyPrinter) Writer.Error!void {
+        if (self.is_local) {
+            try pp.writeInline("local ");
+            try self.names.pretty(pp);
+        } else {
+            try self.names.pretty(pp);
+        }
+        try pp.writeInline(" = ");
+        try self.expr.pretty(pp);
     }
 };
 
@@ -151,7 +189,7 @@ pub const NameList = struct {
     }
 
     // Writes comma separated name list to writer
-    pub fn write(self: *const NameList, writer: *Writer) !void {
+    pub fn write(self: *const NameList, writer: *Writer) Writer.Error!void {
         if (self.names.items.len <= 1) {
             try self.names.items[0].write(writer);
             return;
@@ -163,6 +201,22 @@ pub const NameList = struct {
             try writer.writeAll(", ");
         }
         try self.names.items[i].write(writer);
+        return;
+    }
+
+    /// Pretty prints comma separated name list
+    pub fn pretty(self: *const NameList, pp: *PrettyPrinter) Writer.Error!void {
+        if (self.names.items.len <= 1) {
+            try self.names.items[0].pretty(pp);
+            return;
+        }
+
+        var i: usize = 0;
+        while (i < self.names.items.len - 1) : (i += 1) {
+            try self.names.items[i].pretty(pp);
+            try pp.write(", ");
+        }
+        try self.names.items[i].pretty(pp);
         return;
     }
 };
@@ -181,8 +235,13 @@ pub const ExpressionStatement = struct {
 
     /// Writes the expression statement to the given writer.
     /// Simply delegates to the expression's write method.
-    pub fn write(self: *const ExpressionStatement, writer: *Writer) !void {
+    pub fn write(self: *const ExpressionStatement, writer: *Writer) Writer.Error!void {
         try self.expr.write(writer);
+    }
+
+    /// Pretty prints the expression statement
+    pub fn pretty(self: *const ExpressionStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try self.expr.pretty(pp);
     }
 };
 
@@ -201,10 +260,25 @@ pub const DoStatement = struct {
 
     /// Writes the do statement to the given writer.
     /// Format: "do <block> end"
-    pub fn write(self: *const DoStatement, writer: *Writer) !void {
+    pub fn write(self: *const DoStatement, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("do ");
         try self.block.write(writer);
         _ = try writer.writeAll(" end");
+    }
+
+    /// Pretty prints the do statement
+    pub fn pretty(self: *const DoStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("do");
+        try pp.nl();
+        if (self.block.statements.len > 0) {
+            pp.indent();
+            for (self.block.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
+            }
+            pp.dedent();
+        }
+        try pp.write("end");
     }
 };
 
@@ -225,12 +299,29 @@ pub const WhileStatement = struct {
 
     /// Writes the while statement to the given writer.
     /// Format: "while <condition> do <block> end"
-    pub fn write(self: *const WhileStatement, writer: *Writer) !void {
+    pub fn write(self: *const WhileStatement, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("while ");
         try self.condition.write(writer);
         _ = try writer.writeAll(" do ");
         try self.block.write(writer);
         _ = try writer.writeAll(" end");
+    }
+
+    /// Pretty prints the while statement
+    pub fn pretty(self: *const WhileStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("while ");
+        try self.condition.pretty(pp);
+        try pp.write(" do");
+        try pp.nl();
+        if (self.block.statements.len > 0) {
+            pp.indent();
+            for (self.block.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
+            }
+            pp.dedent();
+        }
+        try pp.write("end");
     }
 };
 
@@ -251,11 +342,27 @@ pub const RepeatStatement = struct {
 
     /// Writes the repeat statement to the given writer.
     /// Format: "repeat <block> until <condition>"
-    pub fn write(self: *const RepeatStatement, writer: *Writer) !void {
+    pub fn write(self: *const RepeatStatement, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("repeat ");
         try self.block.write(writer);
         _ = try writer.writeAll(" until ");
         try self.condition.write(writer);
+    }
+
+    /// Pretty prints the repeat statement
+    pub fn pretty(self: *const RepeatStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("repeat");
+        try pp.nl();
+        if (self.block.statements.len > 0) {
+            pp.indent();
+            for (self.block.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
+            }
+            pp.dedent();
+        }
+        try pp.write("until ");
+        try self.condition.pretty(pp);
     }
 };
 
@@ -282,7 +389,7 @@ pub const ForNumericStatement = struct {
 
     /// Writes the numeric for statement to the given writer.
     /// Format: "for <var> = <start>, <end>[, <step>] do <block> end"
-    pub fn write(self: *const ForNumericStatement, writer: *Writer) !void {
+    pub fn write(self: *const ForNumericStatement, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("for ");
         try self.var_name.write(writer);
         _ = try writer.writeAll(" = ");
@@ -296,6 +403,31 @@ pub const ForNumericStatement = struct {
         _ = try writer.writeAll(" do ");
         try self.block.write(writer);
         _ = try writer.writeAll(" end");
+    }
+
+    /// Pretty prints the numeric for statement
+    pub fn pretty(self: *const ForNumericStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("for ");
+        try self.var_name.pretty(pp);
+        try pp.write(" = ");
+        try self.start.pretty(pp);
+        try pp.write(", ");
+        try self.end.pretty(pp);
+        if (self.step != null) {
+            try pp.write(", ");
+            try self.step.?.pretty(pp);
+        }
+        try pp.write(" do");
+        try pp.nl();
+        if (self.block.statements.len > 0) {
+            pp.indent();
+            for (self.block.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
+            }
+            pp.dedent();
+        }
+        try pp.write("end");
     }
 };
 
@@ -325,7 +457,7 @@ pub const ForGenericStatement = struct {
 
     /// Writes the generic for statement to the given writer.
     /// Format: "for <names> in <expressions> do <block> end"
-    pub fn write(self: *const ForGenericStatement, writer: *Writer) !void {
+    pub fn write(self: *const ForGenericStatement, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("for ");
         try self.names.write(writer);
         _ = try writer.writeAll(" in ");
@@ -344,6 +476,35 @@ pub const ForGenericStatement = struct {
         try self.block.write(writer);
         _ = try writer.writeAll(" end");
     }
+
+    /// Pretty prints the generic for statement
+    pub fn pretty(self: *const ForGenericStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("for ");
+        try self.names.pretty(pp);
+        try pp.write(" in ");
+
+        // Write comma-separated expression list
+        if (self.expressions.items.len > 0) {
+            var i: usize = 0;
+            while (i < self.expressions.items.len - 1) : (i += 1) {
+                try self.expressions.items[i].pretty(pp);
+                try pp.write(", ");
+            }
+            try self.expressions.items[i].pretty(pp);
+        }
+
+        try pp.write(" do");
+        try pp.nl();
+        if (self.block.statements.len > 0) {
+            pp.indent();
+            for (self.block.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
+            }
+            pp.dedent();
+        }
+        try pp.write("end");
+    }
 };
 
 /// Represents a break statement.
@@ -359,8 +520,13 @@ pub const BreakStatement = struct {
 
     /// Writes the break statement to the given writer.
     /// Format: "break"
-    pub fn write(_: *const BreakStatement, writer: *Writer) !void {
+    pub fn write(_: *const BreakStatement, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("break");
+    }
+
+    /// Pretty prints the break statement
+    pub fn pretty(_: *const BreakStatement, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("break");
     }
 };
 
@@ -429,6 +595,27 @@ pub const Expression = union(ExpressionTypes) {
             .MethodCall => |n| try n.write(writer),
         }
     }
+
+    /// Pretty prints the expression
+    pub fn pretty(self: *const Expression, pp: *PrettyPrinter) Writer.Error!void {
+        switch (self.*) {
+            .Identifier => |n| try n.pretty(pp),
+            .Number => |n| try n.pretty(pp),
+            .String => |n| try n.pretty(pp),
+            .Boolean => |n| try n.pretty(pp),
+            .Prefix => |n| try n.pretty(pp),
+            .Infix => |n| try n.pretty(pp),
+            .Conditional => |n| try n.pretty(pp),
+            .Nil => |n| try n.pretty(pp),
+            .Varargs => |n| try n.pretty(pp),
+            .FunctionDef => |n| try n.pretty(pp),
+            .TableConstructor => |n| try n.pretty(pp),
+            .Index => |n| try n.pretty(pp),
+            .Member => |n| try n.pretty(pp),
+            .FunctionCall => |n| try n.pretty(pp),
+            .MethodCall => |n| try n.pretty(pp),
+        }
+    }
 };
 
 /// Represents a variable or function name identifier.
@@ -445,8 +632,14 @@ pub const Identifier = struct {
     }
 
     /// Writes the identifier name to the given writer.
-    pub fn write(self: *const Identifier, writer: *Writer) !void {
+    pub fn write(self: *const Identifier, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll(self.value);
+    }
+
+    /// Pretty prints the identifier
+    pub fn pretty(self: *const Identifier, pp: *PrettyPrinter) Writer.Error!void {
+        // instead of write() and print() to keep expressions on single lines without adding indentation
+        try pp.writeInline(self.value);
     }
 };
 
@@ -469,7 +662,7 @@ pub const InfixExpression = struct {
 
     /// Writes the infix expression to the given writer.
     /// Format: "(<left> <operator> <right>)" with parentheses for grouping.
-    pub fn write(self: *InfixExpression, writer: *Writer) !void {
+    pub fn write(self: *InfixExpression, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("(");
         try self.left.write(writer);
         _ = try writer.writeAll(" ");
@@ -477,6 +670,17 @@ pub const InfixExpression = struct {
         _ = try writer.writeAll(" ");
         try self.right.write(writer);
         _ = try writer.writeAll(")");
+    }
+
+    /// Pretty prints the infix expression
+    pub fn pretty(self: *const InfixExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.writeInline("(");
+        try self.left.pretty(pp);
+        try pp.writeInline(" ");
+        try pp.writeInline(self.operator);
+        try pp.writeInline(" ");
+        try self.right.pretty(pp);
+        try pp.writeInline(")");
     }
 };
 
@@ -497,11 +701,19 @@ pub const IndexExpression = struct {
 
     /// Writes the index expression to the given writer.
     /// Format: "<object>[<index>]"
-    pub fn write(self: *const IndexExpression, writer: *Writer) !void {
+    pub fn write(self: *const IndexExpression, writer: *Writer) Writer.Error!void {
         try self.object.write(writer);
         _ = try writer.writeAll("[");
         try self.index.write(writer);
         _ = try writer.writeAll("]");
+    }
+
+    /// Pretty prints the index expression
+    pub fn pretty(self: *const IndexExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try self.object.pretty(pp);
+        try pp.write("[");
+        try self.index.pretty(pp);
+        try pp.write("]");
     }
 };
 
@@ -522,10 +734,17 @@ pub const MemberExpression = struct {
 
     /// Writes the member expression to the given writer.
     /// Format: "<object>.<field>"
-    pub fn write(self: *const MemberExpression, writer: *Writer) !void {
+    pub fn write(self: *const MemberExpression, writer: *Writer) Writer.Error!void {
         try self.object.write(writer);
         _ = try writer.writeAll(".");
         try self.field.write(writer);
+    }
+
+    /// Pretty prints the member expression
+    pub fn pretty(self: *const MemberExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try self.object.pretty(pp);
+        try pp.write(".");
+        try self.field.pretty(pp);
     }
 };
 
@@ -540,7 +759,7 @@ pub const CallArgs = union(CallArgsType) {
     StringLiteral: *StringLiteral,
 
     /// Writes the call arguments to the given writer
-    pub fn write(self: *const CallArgs, writer: *Writer) !void {
+    pub fn write(self: *const CallArgs, writer: *Writer) Writer.Error!void {
         switch (self.*) {
             .ExpressionList => |exprs| {
                 _ = try writer.writeAll("(");
@@ -556,6 +775,26 @@ pub const CallArgs = union(CallArgsType) {
             },
             .TableConstructor => |table| try table.write(writer),
             .StringLiteral => |str| try str.write(writer),
+        }
+    }
+
+    /// Pretty prints the call arguments
+    pub fn pretty(self: *const CallArgs, pp: *PrettyPrinter) Writer.Error!void {
+        switch (self.*) {
+            .ExpressionList => |exprs| {
+                try pp.write("(");
+                if (exprs.items.len > 0) {
+                    var i: usize = 0;
+                    while (i < exprs.items.len - 1) : (i += 1) {
+                        try exprs.items[i].pretty(pp);
+                        try pp.writeInline(", ");
+                    }
+                    try exprs.items[i].pretty(pp);
+                }
+                try pp.writeInline(")");
+            },
+            .TableConstructor => |table| try table.pretty(pp),
+            .StringLiteral => |str| try str.pretty(pp),
         }
     }
 };
@@ -577,9 +816,15 @@ pub const FunctionCallExpression = struct {
 
     /// Writes the function call to the given writer.
     /// Format: "<function><args>"
-    pub fn write(self: *const FunctionCallExpression, writer: *Writer) !void {
+    pub fn write(self: *const FunctionCallExpression, writer: *Writer) Writer.Error!void {
         try self.function.write(writer);
         try self.args.write(writer);
+    }
+
+    /// Pretty prints the function call
+    pub fn pretty(self: *const FunctionCallExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try self.function.pretty(pp);
+        try self.args.pretty(pp);
     }
 };
 
@@ -602,11 +847,19 @@ pub const MethodCallExpression = struct {
 
     /// Writes the method call to the given writer.
     /// Format: "<object>:<method><args>"
-    pub fn write(self: *const MethodCallExpression, writer: *Writer) !void {
+    pub fn write(self: *const MethodCallExpression, writer: *Writer) Writer.Error!void {
         try self.object.write(writer);
         _ = try writer.writeAll(":");
         try self.method.write(writer);
         try self.args.write(writer);
+    }
+
+    /// Pretty prints the method call
+    pub fn pretty(self: *const MethodCallExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try self.object.pretty(pp);
+        try pp.writeInline(":");
+        try self.method.pretty(pp);
+        try self.args.pretty(pp);
     }
 };
 
@@ -628,7 +881,7 @@ pub const PrefixExpression = struct {
     /// Writes the prefix expression to the given writer.
     /// Format: "(<operator><expr>)" or "(<operator> <expr>)" for word operators.
     /// Word operators like 'not' get a space, symbol operators like '-' do not.
-    pub fn write(self: *PrefixExpression, writer: *Writer) !void {
+    pub fn write(self: *PrefixExpression, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("(");
         _ = try writer.writeAll(self.operator);
         // Only add space for word operators (not, and, or)
@@ -637,6 +890,18 @@ pub const PrefixExpression = struct {
         }
         try self.expression.write(writer);
         _ = try writer.writeAll(")");
+    }
+
+    /// Pretty prints the prefix expression
+    pub fn pretty(self: *const PrefixExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("(");
+        try pp.write(self.operator);
+        // Only add space for word operators (not, and, or)
+        if (std.mem.eql(u8, self.operator, "not")) {
+            try pp.write(" ");
+        }
+        try self.expression.pretty(pp);
+        try pp.write(")");
     }
 };
 
@@ -659,7 +924,7 @@ pub const ConditionalExpression = struct {
 
     /// Writes the conditional expression to the given writer.
     /// Format: "if <condition> then <then_block> [else <else_block>] end"
-    pub fn write(self: *ConditionalExpression, writer: *Writer) !void {
+    pub fn write(self: *ConditionalExpression, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("if ");
         try self.condition.write(writer);
         _ = try writer.writeAll(" then ");
@@ -669,6 +934,35 @@ pub const ConditionalExpression = struct {
             try self.else_block.?.write(writer);
         }
         _ = try writer.writeAll(" end");
+    }
+
+    /// Pretty prints the conditional expression
+    pub fn pretty(self: *const ConditionalExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("if ");
+        try self.condition.pretty(pp);
+        try pp.write(" then");
+        try pp.nl();
+        if (self.then_block.statements.len > 0) {
+            pp.indent();
+            for (self.then_block.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
+            }
+            pp.dedent();
+        }
+        if (self.else_block != null) {
+            try pp.write("else");
+            try pp.nl();
+            if (self.else_block.?.statements.len > 0) {
+                pp.indent();
+                for (self.else_block.?.statements) |stmt| {
+                    try stmt.pretty(pp);
+                    try pp.nl();
+                }
+                pp.dedent();
+            }
+        }
+        try pp.write("end");
     }
 };
 
@@ -689,13 +983,25 @@ pub const NumberLiteral = struct {
         return self.token.literal;
     }
 
-    pub fn write(self: *const NumberLiteral, writer: *Writer) !void {
+    pub fn write(self: *const NumberLiteral, writer: *Writer) Writer.Error!void {
         switch (self.value) {
             .Integer => |i| {
                 try writer.print("{d}", .{i});
             },
             .Float => |f| {
                 try writer.print("{d}", .{f});
+            },
+        }
+    }
+
+    /// Pretty prints the number literal
+    pub fn pretty(self: *const NumberLiteral, pp: *PrettyPrinter) Writer.Error!void {
+        switch (self.value) {
+            .Integer => |i| {
+                try pp.printInline("{d}", .{i});
+            },
+            .Float => |f| {
+                try pp.printInline("{d}", .{f});
             },
         }
     }
@@ -715,8 +1021,13 @@ pub const StringLiteral = struct {
     }
 
     /// Writes the string value to the given writer with quotes.
-    pub fn write(self: *const StringLiteral, writer: *Writer) !void {
+    pub fn write(self: *const StringLiteral, writer: *Writer) Writer.Error!void {
         _ = try writer.print("\"{s}\"", .{self.value});
+    }
+
+    /// Pretty prints the string literal
+    pub fn pretty(self: *const StringLiteral, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.print("\"{s}\"", .{self.value});
     }
 };
 
@@ -734,11 +1045,20 @@ pub const BooleanLiteral = struct {
     }
 
     /// Writes the boolean value to the given writer as "true" or "false".
-    pub fn write(self: *const BooleanLiteral, writer: *Writer) !void {
+    pub fn write(self: *const BooleanLiteral, writer: *Writer) Writer.Error!void {
         if (self.value) {
             try writer.print("true", .{});
         } else {
             try writer.print("false", .{});
+        }
+    }
+
+    /// Pretty prints the boolean literal
+    pub fn pretty(self: *const BooleanLiteral, pp: *PrettyPrinter) Writer.Error!void {
+        if (self.value) {
+            try pp.write("true");
+        } else {
+            try pp.write("false");
         }
     }
 };
@@ -754,8 +1074,13 @@ pub const Nil = struct {
     }
 
     /// Writes the integer value to the given writer in decimal format.
-    pub fn write(_: *const Nil, writer: *Writer) !void {
+    pub fn write(_: *const Nil, writer: *Writer) Writer.Error!void {
         try writer.print("nil", .{});
+    }
+
+    /// Pretty prints the nil literal
+    pub fn pretty(_: *const Nil, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("nil");
     }
 };
 
@@ -772,8 +1097,13 @@ pub const Varargs = struct {
     }
 
     /// Writes the varargs to the given writer as "...".
-    pub fn write(_: *const Varargs, writer: *Writer) !void {
+    pub fn write(_: *const Varargs, writer: *Writer) Writer.Error!void {
         try writer.print("...", .{});
+    }
+
+    /// Pretty prints the varargs
+    pub fn pretty(_: *const Varargs, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.print("...", .{});
     }
 };
 
@@ -806,7 +1136,7 @@ pub const Field = union(FieldType) {
     }
 
     /// Writes the field to the given writer
-    pub fn write(self: *const Field, writer: *Writer) !void {
+    pub fn write(self: *const Field, writer: *Writer) Writer.Error!void {
         switch (self.*) {
             .ArrayStyle => |expr| try expr.write(writer),
             .RecordStyle => |record| {
@@ -819,6 +1149,24 @@ pub const Field = union(FieldType) {
                 try computed.key.write(writer);
                 _ = try writer.writeAll("] = ");
                 try computed.value.write(writer);
+            },
+        }
+    }
+
+    /// Pretty prints the field
+    pub fn pretty(self: *const Field, pp: *PrettyPrinter) Writer.Error!void {
+        switch (self.*) {
+            .ArrayStyle => |expr| try expr.pretty(pp),
+            .RecordStyle => |record| {
+                try record.name.pretty(pp);
+                try pp.write(" = ");
+                try record.value.pretty(pp);
+            },
+            .ComputedKey => |computed| {
+                try pp.write("[");
+                try computed.key.pretty(pp);
+                try pp.write("] = ");
+                try computed.value.pretty(pp);
             },
         }
     }
@@ -846,7 +1194,7 @@ pub const TableConstructor = struct {
 
     /// Writes the table constructor to the given writer
     /// Format: "{[field][, field]*}"
-    pub fn write(self: *const TableConstructor, writer: *Writer) !void {
+    pub fn write(self: *const TableConstructor, writer: *Writer) Writer.Error!void {
         _ = try writer.writeAll("{");
 
         if (self.fields.items.len > 0) {
@@ -859,6 +1207,29 @@ pub const TableConstructor = struct {
         }
 
         _ = try writer.writeAll("}");
+    }
+
+    // Pretty prints the table literal
+    pub fn pretty(self: *const TableConstructor, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("{");
+
+        if (self.fields.items.len > 0) {
+            try pp.nl();
+            var i: usize = 0;
+            pp.indent();
+            while (i < self.fields.items.len - 1) : (i += 1) {
+                try pp.write("");
+                try self.fields.items[i].pretty(pp);
+                try pp.writeInline(", ");
+                try pp.nl();
+            }
+            try pp.write("");
+            try self.fields.items[i].pretty(pp);
+            try pp.nl();
+            pp.dedent();
+        }
+
+        try pp.write("}");
     }
 };
 
@@ -912,7 +1283,7 @@ pub const ParamList = struct {
     }
 
     /// Writes comma-separated parameter list to writer
-    pub fn write(self: *const ParamList, writer: *Writer) !void {
+    pub fn write(self: *const ParamList, writer: *Writer) Writer.Error!void {
         if (self.names.items.len == 0 and self.has_varargs) {
             try writer.writeAll("...");
             return;
@@ -928,6 +1299,26 @@ pub const ParamList = struct {
 
         if (self.has_varargs) {
             try writer.writeAll("...");
+        }
+    }
+
+    /// Pretty prints the param list
+    pub fn pretty(self: *const ParamList, pp: *PrettyPrinter) Writer.Error!void {
+        if (self.names.items.len == 0 and self.has_varargs) {
+            try pp.write("...");
+            return;
+        }
+
+        var i: usize = 0;
+        while (i < self.names.items.len) : (i += 1) {
+            try self.names.items[i].pretty(pp);
+            if (i < self.names.items.len - 1 or self.has_varargs) {
+                try pp.write(", ");
+            }
+        }
+
+        if (self.has_varargs) {
+            try pp.write("...");
         }
     }
 };
@@ -949,17 +1340,38 @@ pub const FunctionBody = struct {
 
     /// Writes the function body to writer
     /// Format: "([params]) <block> end"
-    pub fn write(self: *const FunctionBody, writer: *Writer) !void {
+    pub fn write(self: *const FunctionBody, writer: *Writer) Writer.Error!void {
         try writer.writeAll("(");
         if (self.params != null) {
             try self.params.?.write(writer);
         }
         try writer.writeAll(")");
         if (self.block.statements.len > 0) {
+            // FIXME
             try writer.writeAll(" ");
         }
         try self.block.write(writer);
         try writer.writeAll(" end");
+    }
+
+    /// Pretty prints the function body
+    pub fn pretty(self: *const FunctionBody, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("(");
+        if (self.params != null) {
+            try self.params.?.pretty(pp);
+        }
+        try pp.write(")");
+        try pp.nl();
+        if (self.block.statements.len > 0) {
+            pp.indent();
+            for (self.block.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
+            }
+            pp.dedent();
+        }
+        try pp.write("end");
+        try pp.nl();
     }
 };
 
@@ -978,9 +1390,15 @@ pub const FunctionDefExpression = struct {
 
     /// Writes the function definition to writer
     /// Format: "function<body>"
-    pub fn write(self: *const FunctionDefExpression, writer: *Writer) !void {
+    pub fn write(self: *const FunctionDefExpression, writer: *Writer) Writer.Error!void {
         try writer.writeAll("function");
         try self.body.write(writer);
+    }
+
+    /// Pretty prints the function def exp
+    pub fn pretty(self: *const FunctionDefExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write("function");
+        try self.body.pretty(pp);
     }
 };
 
@@ -1003,12 +1421,21 @@ pub const FunctionDeclaration = struct {
     }
 
     /// Writes the function definition to writer
-    pub fn write(self: *const FunctionDeclaration, writer: *Writer) !void {
+    pub fn write(self: *const FunctionDeclaration, writer: *Writer) Writer.Error!void {
         if (self.is_local) {
             try writer.writeAll("local ");
         }
         try writer.print("function {s}", .{self.name.value});
         try self.body.write(writer);
+    }
+
+    /// Pretty print the function decl
+    pub fn pretty(self: *const FunctionDeclaration, pp: *PrettyPrinter) Writer.Error!void {
+        if (self.is_local) {
+            try pp.write("local ");
+        }
+        try pp.print("function {s}", .{self.name.value});
+        try self.body.pretty(pp);
     }
 };
 
@@ -1038,6 +1465,18 @@ pub const Program = struct {
             for (self.statements) |stmt| {
                 try stmt.write(writer);
                 try writer.writeAll("\n");
+            }
+        }
+    }
+
+    /// Pretty print the program
+    pub fn pretty(self: *const Program, pp: *PrettyPrinter) Writer.Error!void {
+        if (self.statements.len == 1) {
+            try self.statements[0].pretty(pp);
+        } else {
+            for (self.statements) |stmt| {
+                try stmt.pretty(pp);
+                try pp.nl();
             }
         }
     }

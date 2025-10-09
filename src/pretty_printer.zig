@@ -48,4 +48,14 @@ pub const PrettyPrinter = struct {
         _ = try self.writer.splatByte(' ', self.current_indent);
         try self.writer.print(fmt, args);
     }
+
+    /// Write contents inline without indentation (for continuing on the same line)
+    pub fn writeInline(self: *PrettyPrinter, content: []const u8) Writer.Error!void {
+        try self.writer.print("{s}", .{content});
+    }
+
+    /// Print formatted content inline without indentation (for continuing on the same line)
+    pub fn printInline(self: *PrettyPrinter, comptime fmt: []const u8, args: anytype) Writer.Error!void {
+        try self.writer.print(fmt, args);
+    }
 };

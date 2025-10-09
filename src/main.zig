@@ -11,12 +11,14 @@ const p = @import("parser.zig");
 const Parser = p.Parser;
 const ParserError = p.Parser.ParserError;
 pub const token = @import("token.zig");
+const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
 
 const CommandErrUnion = (std.mem.Allocator.Error || std.Io.Writer.Error || Lexer.LexError || ParserError || std.fmt.ParseIntError || std.fs.File.OpenError || std.Io.Reader.Error);
 const Command = *const fn (args: *std.process.ArgIterator) CommandErrUnion!u8;
 const command_map = std.StaticStringMap(Command).initComptime(.{
     .{ "repl", &repl },
     .{ "parse", &parse_file },
+    .{ "fmt", &fmt_file },
     .{ "help", &help },
 });
 
@@ -55,12 +57,14 @@ pub fn help(args: *std.process.ArgIterator) CommandErrUnion!u8 {
         \\  repl --lex           Start REPL in lexer mode (tokenization only)
         \\  repl --parse         Start REPL in parser mode (full parsing)
         \\  parse <file>         Parse a Lua file and output the AST
+        \\  fmt <file>           Format a Lua file with pretty printing
         \\
         \\EXAMPLES:
         \\  mog help
         \\  mog repl --lex
         \\  mog repl --parse
         \\  mog parse script.lua
+        \\  mog fmt script.lua
         \\
     ;
 
@@ -171,6 +175,42 @@ pub fn parse_file(args: *std.process.ArgIterator) CommandErrUnion!u8 {
 
     // Write to stdodut
     try program.write(&writer.interface);
+    try writer.interface.flush();
+
+    return 0;
+}
+
+pub fn fmt_file(args: *std.process.ArgIterator) CommandErrUnion!u8 {
+    const file_name = args.next();
+
+    if (file_name == null) {
+        return 1;
+    }
+
+    // Open file
+    const file_handle = try std.fs.cwd().openFile(file_name.?, .{});
+    const stat = try file_handle.stat();
+    const file_size = stat.size;
+
+    // Read contents
+    var input_buffer: [2048]u8 = undefined;
+    var reader = file_handle.reader(&input_buffer);
+    const alloc = std.heap.smp_allocator;
+    const file_data = try reader.interface.readAlloc(alloc, file_size);
+
+    // Create and run parser
+    var lexer = try Lexer.init(alloc, file_data);
+    var parser = try Parser.init(alloc, &lexer);
+    const program = try parser.parseProgram();
+
+    // Create stdout writer
+    var output_buffer: [1028]u8 = undefined;
+    const stdout = std.fs.File.stdout();
+    var writer = stdout.writer(&output_buffer);
+
+    // Pretty print to stdout
+    var pp = PrettyPrinter.init(&writer.interface);
+    try program.pretty(&pp);
     try writer.interface.flush();
 
     return 0;
