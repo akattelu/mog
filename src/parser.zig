@@ -306,6 +306,8 @@ pub const Parser = struct {
         try self.nextToken();
         // TODO: handle multiple return values
         rs.expr = try self.parseExpression(Precedence.lowest);
+
+        // TODO: support bare return without semicolon ending
         if (self.peekTokenIs(TokenType.semicolon)) {
             try self.nextToken();
         }
