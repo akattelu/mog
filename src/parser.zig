@@ -535,6 +535,7 @@ pub const Parser = struct {
         }
         try self.nextToken();
 
+        // TODO: parse multiple expressions on RHS
         const expr = try self.parseExpression(Precedence.lowest);
         as.expr = expr;
 

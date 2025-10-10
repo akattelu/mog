@@ -86,7 +86,7 @@ pub const Lexer = struct {
 
     fn readIdent(self: *Lexer) []const u8 {
         const start_pos = self.position;
-        while (isLetter(self.ch)) {
+        while (isLetter(self.ch) or self.ch == '_') {
             self.readChar();
         }
         return self.input[start_pos..self.position];
