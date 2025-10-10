@@ -283,6 +283,11 @@ pub const Parser = struct {
             .t_for => {
                 return try self.parseForStatement();
             },
+            .t_break => {
+                const brk = try self.alloc.allocator().create(ast.BreakStatement);
+                brk.* = .{ .token = self.current_token.* };
+                stmt.* = .{ .Break = brk };
+            },
             else => {
                 stmt.* = .{ .Expression = try self.parseExpressionStatement() };
             },
