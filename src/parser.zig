@@ -226,7 +226,12 @@ pub const Parser = struct {
         var program = try self.alloc.allocator().create(ast.Program);
         var statements = try std.ArrayList(*ast.Statement).initCapacity(self.alloc.allocator(), 64);
         while (self.current_token.type != .eof) {
-            const stmt = try self.parseStatement();
+            const stmt = self.parseStatement() catch |err| {
+                if (err == ParserError.fail) {
+                    std.log.err("Encountered parser error at token: type: {any}, literal: {s}, pos: {d}..{d}", .{ self.current_token.type, self.current_token.literal, self.current_token.start_pos, self.current_token.end_pos });
+                }
+                return err;
+            };
             try statements.append(self.alloc.allocator(), stmt);
             try self.nextToken();
         }
