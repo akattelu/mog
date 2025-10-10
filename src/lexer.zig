@@ -84,9 +84,13 @@ pub const Lexer = struct {
         return .{ .literal = number_as_string, .is_float = is_float };
     }
 
-    fn readIdent(self: *Lexer) []const u8 {
+    fn readIdent(self: *Lexer) ![]const u8 {
         const start_pos = self.position;
-        while (isLetter(self.ch) or self.ch == '_') {
+        if (!isLetter(self.ch)) {
+            // first letter of an identifier must be alpha
+            return LexError.Illegal;
+        }
+        while (isLetter(self.ch) or self.ch == '_' or isDigit(self.ch)) {
             self.readChar();
         }
         return self.input[start_pos..self.position];
@@ -295,7 +299,7 @@ pub const Lexer = struct {
                     tok.* = .{ .literal = self.readString(), .type = TokenType.string, .start_pos = @intCast(self.position - tok.literal.len), .end_pos = self.position - 1 };
                     return tok;
                 } else if (isLetter(self.ch)) {
-                    tok.literal = self.readIdent();
+                    tok.literal = try self.readIdent();
                     tok.type = TokenType.fromWord(tok.literal);
                     tok.start_pos = @intCast(self.position - tok.literal.len);
                     tok.end_pos = self.position - 1;

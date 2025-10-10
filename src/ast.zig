@@ -84,6 +84,7 @@ pub const ReturnStatement = struct {
     /// The 'return' keyword token
     token: token.Token,
     /// The optional expression to return (null for bare return statements)
+    /// TODO: handle multiple return values
     expr: ?*Expression,
 
     /// Returns the literal text of the return keyword.

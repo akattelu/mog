@@ -9,7 +9,7 @@ test "comprehensive token coverage" {
     const input =
         \\function local if else elseif then end do while repeat until for in break goto
         \\return type not and or nil true false
-        \\identifier 42 "string literal"
+        \\identifier ident_w_underscore ident3 42 "string literal"
         \\= + - * / # ~ < > == ~= . >= <=
         \\( ) { } [ ] , ; :
         \\ .. ... % ^ // & | << >> ::
@@ -46,6 +46,8 @@ test "comprehensive token coverage" {
         .{ .expectedType = TokenType.false, .expectedLiteral = "false" },
         // Literals
         .{ .expectedType = TokenType.ident, .expectedLiteral = "identifier" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "ident_w_underscore" },
+        .{ .expectedType = TokenType.ident, .expectedLiteral = "ident3" },
         .{ .expectedType = TokenType.int, .expectedLiteral = "42" },
         .{ .expectedType = TokenType.string, .expectedLiteral = "\"string literal\"" },
         // Operators
