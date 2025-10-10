@@ -3,10 +3,11 @@ const token = @import("token.zig");
 const TokenType = token.TokenType;
 const Token = token.Token;
 
-fn isDigit(ch: u8) bool {
+inline fn isDigit(ch: u8) bool {
     return std.ascii.isDigit(ch);
 }
-fn isLetter(ch: u8) bool {
+
+inline fn isLetter(ch: u8) bool {
     return std.ascii.isAlphabetic(ch);
 }
 
