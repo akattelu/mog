@@ -13,9 +13,11 @@ pub const Parser = struct {
     peek_token: *token.Token,
     parser_error: ?*const []u8,
     alloc: std.heap.ArenaAllocator,
+    err: ?ParserErrorInfo,
 
     // Parser error
-    pub const ParserError = error{fail};
+    pub const ParserError = error{ fail, unexpected_token };
+    const ParserErrorType = enum { unexpected_token };
     const SuperError = (LexError || ParserError || AllocError || std.fmt.ParseIntError);
     const PrefixParseFn = *const fn (*Parser) SuperError!*ast.Expression;
     const InfixParseFn = *const fn (*Parser, *ast.Expression) SuperError!*ast.Expression;
@@ -72,6 +74,8 @@ pub const Parser = struct {
             return TokenPrecedenceMap.get(@tagName(t)) orelse Precedence.lowest;
         }
     };
+
+    const ParserErrorInfo = union(ParserErrorType) { unexpected_token: struct { expected_token_type: TokenType, actual_token: token.Token } };
 
     const InfixMap = std.StaticStringMap(InfixParseFn).initComptime(.{
         // Arithmetic operators
@@ -149,6 +153,7 @@ pub const Parser = struct {
             .peek_token = second,
             .parser_error = null,
             .alloc = alloc,
+            .err = null,
         };
         return parser;
     }
@@ -1100,5 +1105,11 @@ pub const Parser = struct {
 
         expr.* = .{ .MethodCall = call };
         return expr;
+    }
+
+    // Set an "expected x but got y" error into the parser state
+    // Uses the current parser token as "actual"
+    fn setErrExpected(self: *Parser, expected: TokenType) void {
+        self.err = .{ .unexpected_token = .{ .expected_token_type = expected, .actual_token = self.current_token.* } };
     }
 };
