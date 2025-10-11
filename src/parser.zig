@@ -17,7 +17,7 @@ pub const Parser = struct {
 
     // Parser error
     pub const ParserError = error{ fail, unexpected_token };
-    const ParserErrorType = enum { unexpected_token };
+    const ParserErrorType = enum { unexpected_token, unexpected_token_any };
     const SuperError = (LexError || ParserError || AllocError || std.fmt.ParseIntError);
     const PrefixParseFn = *const fn (*Parser) SuperError!*ast.Expression;
     const InfixParseFn = *const fn (*Parser, *ast.Expression) SuperError!*ast.Expression;
@@ -75,7 +75,7 @@ pub const Parser = struct {
         }
     };
 
-    const ParserErrorInfo = union(ParserErrorType) { unexpected_token: struct { expected_token_type: TokenType, actual_token: token.Token } };
+    const ParserErrorInfo = union(ParserErrorType) { unexpected_token: struct { expected_token_type: TokenType, actual_token: token.Token }, unexpected_token_any: struct { expected_token_types: []const TokenType, actual_token: token.Token } };
 
     const InfixMap = std.StaticStringMap(InfixParseFn).initComptime(.{
         // Arithmetic operators
@@ -164,6 +164,21 @@ pub const Parser = struct {
         self.alloc.deinit();
     }
 
+    /// Prints the error stored in the parser struct
+    pub fn printError(self: *Parser) void {
+        if (self.err == null) {
+            std.log.err("Encountered unknown error while parsing", .{});
+        }
+        switch (self.err.?) {
+            .unexpected_token => |e| {
+                std.log.err("Expected token type: {s} but got {s} at position {d}..{d}", .{ @tagName(e.expected_token_type), @tagName(self.current_token.type), self.current_token.start_pos, self.current_token.end_pos });
+            },
+            .unexpected_token_any => |e| {
+                std.log.err("Expected any of tokens: {any} but got \"{s}\" at position {d}..{d}", .{ e.expected_token_types, @tagName(self.current_token.type), self.current_token.start_pos, self.current_token.end_pos });
+            },
+        }
+    }
+
     /// Read another token
     fn nextToken(self: *Parser) !void {
         self.current_token = self.peek_token;
@@ -233,7 +248,7 @@ pub const Parser = struct {
         while (self.current_token.type != .eof) {
             const stmt = self.parseStatement() catch |err| {
                 if (err == ParserError.fail) {
-                    std.log.err("Encountered parser error at token: type: {any}, literal: {s}, pos: {d}..{d}", .{ self.current_token.type, self.current_token.literal, self.current_token.start_pos, self.current_token.end_pos });
+                    self.printError();
                 }
                 return err;
             };
@@ -254,6 +269,7 @@ pub const Parser = struct {
                 } else if (self.peekTokenIs(.function)) {
                     stmt.* = .{ .FunctionDeclaration = try self.parseFunctionDeclaration(true) };
                 } else {
+                    self.setErrExpectedAny(&[_]TokenType{ .ident, .function });
                     return ParserError.fail;
                 }
             },
@@ -1111,5 +1127,11 @@ pub const Parser = struct {
     // Uses the current parser token as "actual"
     fn setErrExpected(self: *Parser, expected: TokenType) void {
         self.err = .{ .unexpected_token = .{ .expected_token_type = expected, .actual_token = self.current_token.* } };
+    }
+
+    // Set an "expected any of x,y but got z" error into the parser state
+    // Uses the current parser token as "actual"
+    fn setErrExpectedAny(self: *Parser, expected_token_Types: []const TokenType) void {
+        self.err = .{ .unexpected_token_any = .{ .expected_token_types = expected_token_Types, .actual_token = self.current_token.* } };
     }
 };
