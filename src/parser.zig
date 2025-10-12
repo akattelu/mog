@@ -342,6 +342,7 @@ pub const Parser = struct {
         ds.block = try self.parseBlock();
         // parseBlock leaves us at 'end'
         if (!self.currentTokenIs(.end)) {
+            self.setErrExpected(.end);
             return ParserError.fail;
         }
         return ds;
@@ -354,12 +355,14 @@ pub const Parser = struct {
         ws.condition = try self.parseExpression(Precedence.lowest);
         // Expect 'do' after condition
         if (!self.expectAndPeek(.do)) {
+            self.setErrExpected(.do);
             return ParserError.fail;
         }
         try self.nextToken(); // move past 'do'
         ws.block = try self.parseBlock();
         // parseBlock leaves us at 'end'
         if (!self.currentTokenIs(.end)) {
+            self.setErrExpected(.end);
             return ParserError.fail;
         }
         return ws;
@@ -383,6 +386,7 @@ pub const Parser = struct {
 
         // We should be at 'until' now
         if (!self.currentTokenIs(.until)) {
+            self.setErrExpected(.until);
             return ParserError.fail;
         }
         try self.nextToken(); // move past 'until'
@@ -398,6 +402,7 @@ pub const Parser = struct {
 
         // Expect identifier after 'for'
         if (!self.expectAndPeek(.ident)) {
+            self.setErrExpected(.ident);
             return ParserError.fail;
         }
         // Now current token is the identifier
@@ -412,6 +417,7 @@ pub const Parser = struct {
         } else if (self.peekTokenIs(.comma) or self.peekTokenIs(.in)) {
             return try self.parseForGenericStatement(for_token, first_ident);
         } else {
+            self.setErrExpectedAny(&[_]TokenType{ .assign, .comma, .in });
             return ParserError.fail;
         }
     }
@@ -427,6 +433,7 @@ pub const Parser = struct {
 
         // Expect '=' after variable name
         if (!self.expectAndPeek(.assign)) {
+            self.setErrExpected(.assign);
             return ParserError.fail;
         }
         try self.nextToken(); // move past '='
@@ -436,6 +443,7 @@ pub const Parser = struct {
 
         // Expect comma after start
         if (!self.expectAndPeek(.comma)) {
+            self.setErrExpected(.comma);
             return ParserError.fail;
         }
         try self.nextToken(); // move past comma
@@ -454,6 +462,7 @@ pub const Parser = struct {
 
         // Expect 'do' keyword
         if (!self.expectAndPeek(.do)) {
+            self.setErrExpected(.do);
             return ParserError.fail;
         }
         try self.nextToken(); // move past 'do'
@@ -463,6 +472,7 @@ pub const Parser = struct {
 
         // Should be at 'end'
         if (!self.currentTokenIs(.end)) {
+            self.setErrExpected(.end);
             return ParserError.fail;
         }
 
@@ -493,6 +503,7 @@ pub const Parser = struct {
             }
 
             if (!self.expectAndPeek(.ident)) {
+                self.setErrExpected(.ident);
                 return ParserError.fail;
             }
             const next_ident = try self.parseIdentifier();
@@ -503,6 +514,7 @@ pub const Parser = struct {
 
         // Expect 'in' keyword
         if (!self.expectAndPeek(.in)) {
+            self.setErrExpected(.in);
             return ParserError.fail;
         }
         try self.nextToken(); // move past 'in'
@@ -512,6 +524,7 @@ pub const Parser = struct {
 
         // Expect 'do' keyword
         if (!self.expectAndPeek(.do)) {
+            self.setErrExpected(.do);
             return ParserError.fail;
         }
         try self.nextToken(); // move past 'do'
@@ -521,6 +534,7 @@ pub const Parser = struct {
 
         // Should be at 'end'
         if (!self.currentTokenIs(.end)) {
+            self.setErrExpected(.end);
             return ParserError.fail;
         }
 
@@ -535,6 +549,7 @@ pub const Parser = struct {
         if (is_local) {
             as.token = self.current_token.*; // 'local' token
             if (!self.expectAndPeek(.ident)) {
+                self.setErrExpected(.ident);
                 return ParserError.fail;
             }
         } else {
@@ -550,6 +565,7 @@ pub const Parser = struct {
         while (self.peekTokenIs(.comma)) {
             try self.nextToken(); // consume comma
             if (!self.expectAndPeek(.ident)) {
+                self.setErrExpected(.ident);
                 return ParserError.fail;
             }
             const next_ident = try self.parseIdentifier();
@@ -560,6 +576,7 @@ pub const Parser = struct {
 
         // Expect assignment operator
         if (!self.expectAndPeek(.assign)) {
+            self.setErrExpected(.assign);
             return ParserError.fail;
         }
         try self.nextToken();
@@ -637,6 +654,7 @@ pub const Parser = struct {
 
         // Expect closing ']'
         if (!self.expectAndPeek(.rbracket)) {
+            self.setErrExpected(.rbracket);
             return ParserError.fail;
         }
 
@@ -653,6 +671,7 @@ pub const Parser = struct {
 
         // Expect identifier after dot
         if (!self.expectAndPeek(.ident)) {
+            self.setErrExpected(.ident);
             return ParserError.fail;
         }
 
@@ -675,6 +694,7 @@ pub const Parser = struct {
         // on condition
         cond_expr.condition = try self.parseExpression(.lowest);
         if (!self.expectAndPeek(.then)) {
+            self.setErrExpected(.then);
             return ParserError.fail;
         }
         try self.nextToken();
@@ -683,6 +703,7 @@ pub const Parser = struct {
             try self.nextToken();
             cond_expr.else_block = try self.parseBlock();
             if (self.currentTokenIs(.t_else)) {
+                self.setErrExpected(.t_else);
                 return ParserError.fail;
             }
         } else {
@@ -697,6 +718,7 @@ pub const Parser = struct {
         try self.nextToken();
         const expr = try self.parseExpression(.lowest);
         if (!self.expectAndPeek(.rparen)) {
+            self.setErrExpected(.rparen);
             return ParserError.fail;
         }
         return expr;
@@ -789,6 +811,7 @@ pub const Parser = struct {
         } else if (std.mem.eql(u8, self.current_token.literal, "false")) {
             boolean.value = false;
         } else {
+            self.setErrExpectedAny(&[_]TokenType{ .true, .false });
             return ParserError.fail;
         }
         expr.* = .{ .Boolean = boolean };
@@ -808,6 +831,7 @@ pub const Parser = struct {
 
         // Parse first parameter (must be identifier)
         if (!self.currentTokenIs(.ident)) {
+            self.setErrExpected(.ident);
             return ParserError.fail;
         }
         const first_param = try self.parseIdentifier();
@@ -826,6 +850,7 @@ pub const Parser = struct {
 
             // Must be an identifier
             if (!self.currentTokenIs(.ident)) {
+                self.setErrExpected(.ident);
                 return ParserError.fail;
             }
             const param = try self.parseIdentifier();
@@ -863,6 +888,7 @@ pub const Parser = struct {
 
         // Expect opening paren
         if (!self.expectAndPeek(.lparen)) {
+            self.setErrExpected(.lparen);
             return ParserError.fail;
         }
         body.token = self.current_token.*; // lparen token
@@ -877,6 +903,7 @@ pub const Parser = struct {
             body.params = try self.parseParamList();
             // Move to rparen
             if (!self.expectAndPeek(.rparen)) {
+                self.setErrExpected(.rparen);
                 return ParserError.fail;
             }
         }
@@ -887,6 +914,7 @@ pub const Parser = struct {
 
         // Current token should be 'end'
         if (!self.currentTokenIs(.end)) {
+            self.setErrExpected(.end);
             return ParserError.fail;
         }
 
@@ -947,11 +975,13 @@ pub const Parser = struct {
 
             // Expect ']'
             if (!self.expectAndPeek(.rbracket)) {
+                self.setErrExpected(.rbracket);
                 return ParserError.fail;
             }
 
             // Expect '='
             if (!self.expectAndPeek(.assign)) {
+                self.setErrExpected(.assign);
                 return ParserError.fail;
             }
             try self.nextToken(); // move past '='
@@ -1029,6 +1059,7 @@ pub const Parser = struct {
 
         // Expect closing brace
         if (!self.expectAndPeek(.rbrace)) {
+            self.setErrExpected(.rbrace);
             return ParserError.fail;
         }
 
@@ -1054,6 +1085,7 @@ pub const Parser = struct {
 
             // Expect closing paren
             if (!self.expectAndPeek(.rparen)) {
+                self.setErrExpected(.rparen);
                 return ParserError.fail;
             }
 
@@ -1071,6 +1103,7 @@ pub const Parser = struct {
             str.value = self.current_token.literal[1..len];
             return ast.CallArgs{ .StringLiteral = str };
         } else {
+            self.setErrExpectedAny(&[_]TokenType{ .lparen, .lbrace, .string });
             return ParserError.fail;
         }
     }
@@ -1102,6 +1135,7 @@ pub const Parser = struct {
 
         // Expect identifier after ':'
         if (!self.expectAndPeek(.ident)) {
+            self.setErrExpected(.ident);
             return ParserError.fail;
         }
 
@@ -1113,6 +1147,7 @@ pub const Parser = struct {
 
         // Expect args after method name (can be '(', '{', or string)
         if (!self.peekTokenIs(.lparen) and !self.peekTokenIs(.lbrace) and !self.peekTokenIs(.string)) {
+            self.setErrExpectedAny(&[_]TokenType{ .lparen, .lbrace, .string });
             return ParserError.fail;
         }
         try self.nextToken(); // move to args token
