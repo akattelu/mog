@@ -141,12 +141,12 @@ pub const AssignmentStatement = struct {
     /// Pretty prints the assignment statement
     pub fn pretty(self: *const AssignmentStatement, pp: *PrettyPrinter) Writer.Error!void {
         if (self.is_local) {
-            try pp.writeInline("local ");
+            try pp.write("local ");
             try self.names.pretty(pp);
         } else {
             try self.names.pretty(pp);
         }
-        try pp.writeInline(" = ");
+        try pp.write(" = ");
         try self.expr.pretty(pp);
     }
 };
@@ -269,9 +269,9 @@ pub const DoStatement = struct {
 
     /// Pretty prints the do statement
     pub fn pretty(self: *const DoStatement, pp: *PrettyPrinter) Writer.Error!void {
-        try pp.write("do");
-        try pp.nl();
+        try pp.write("do ");
         if (self.block.statements.len > 0) {
+            try pp.nl();
             pp.indent();
             for (self.block.statements) |stmt| {
                 try stmt.pretty(pp);
@@ -312,9 +312,9 @@ pub const WhileStatement = struct {
     pub fn pretty(self: *const WhileStatement, pp: *PrettyPrinter) Writer.Error!void {
         try pp.write("while ");
         try self.condition.pretty(pp);
-        try pp.write(" do");
-        try pp.nl();
+        try pp.write(" do ");
         if (self.block.statements.len > 0) {
+            try pp.nl();
             pp.indent();
             for (self.block.statements) |stmt| {
                 try stmt.pretty(pp);
@@ -352,9 +352,9 @@ pub const RepeatStatement = struct {
 
     /// Pretty prints the repeat statement
     pub fn pretty(self: *const RepeatStatement, pp: *PrettyPrinter) Writer.Error!void {
-        try pp.write("repeat");
-        try pp.nl();
+        try pp.write("repeat ");
         if (self.block.statements.len > 0) {
+            try pp.nl();
             pp.indent();
             for (self.block.statements) |stmt| {
                 try stmt.pretty(pp);
@@ -640,7 +640,7 @@ pub const Identifier = struct {
     /// Pretty prints the identifier
     pub fn pretty(self: *const Identifier, pp: *PrettyPrinter) Writer.Error!void {
         // instead of write() and print() to keep expressions on single lines without adding indentation
-        try pp.writeInline(self.value);
+        try pp.write(self.value);
     }
 };
 
@@ -675,13 +675,13 @@ pub const InfixExpression = struct {
 
     /// Pretty prints the infix expression
     pub fn pretty(self: *const InfixExpression, pp: *PrettyPrinter) Writer.Error!void {
-        try pp.writeInline("(");
+        try pp.write("(");
         try self.left.pretty(pp);
-        try pp.writeInline(" ");
-        try pp.writeInline(self.operator);
-        try pp.writeInline(" ");
+        try pp.write(" ");
+        try pp.write(self.operator);
+        try pp.write(" ");
         try self.right.pretty(pp);
-        try pp.writeInline(")");
+        try pp.write(")");
     }
 };
 
@@ -788,11 +788,11 @@ pub const CallArgs = union(CallArgsType) {
                     var i: usize = 0;
                     while (i < exprs.items.len - 1) : (i += 1) {
                         try exprs.items[i].pretty(pp);
-                        try pp.writeInline(", ");
+                        try pp.write(", ");
                     }
                     try exprs.items[i].pretty(pp);
                 }
-                try pp.writeInline(")");
+                try pp.write(")");
             },
             .TableConstructor => |table| try table.pretty(pp),
             .StringLiteral => |str| try str.pretty(pp),
@@ -858,7 +858,7 @@ pub const MethodCallExpression = struct {
     /// Pretty prints the method call
     pub fn pretty(self: *const MethodCallExpression, pp: *PrettyPrinter) Writer.Error!void {
         try self.object.pretty(pp);
-        try pp.writeInline(":");
+        try pp.write(":");
         try self.method.pretty(pp);
         try self.args.pretty(pp);
     }
@@ -941,9 +941,9 @@ pub const ConditionalExpression = struct {
     pub fn pretty(self: *const ConditionalExpression, pp: *PrettyPrinter) Writer.Error!void {
         try pp.write("if ");
         try self.condition.pretty(pp);
-        try pp.write(" then");
-        try pp.nl();
+        try pp.write(" then ");
         if (self.then_block.statements.len > 0) {
+            try pp.nl();
             pp.indent();
             for (self.then_block.statements) |stmt| {
                 try stmt.pretty(pp);
@@ -952,9 +952,9 @@ pub const ConditionalExpression = struct {
             pp.dedent();
         }
         if (self.else_block != null) {
-            try pp.write("else");
-            try pp.nl();
+            try pp.write("else ");
             if (self.else_block.?.statements.len > 0) {
+                try pp.nl();
                 pp.indent();
                 for (self.else_block.?.statements) |stmt| {
                     try stmt.pretty(pp);
@@ -999,10 +999,10 @@ pub const NumberLiteral = struct {
     pub fn pretty(self: *const NumberLiteral, pp: *PrettyPrinter) Writer.Error!void {
         switch (self.value) {
             .Integer => |i| {
-                try pp.printInline("{d}", .{i});
+                try pp.print("{d}", .{i});
             },
             .Float => |f| {
-                try pp.printInline("{d}", .{f});
+                try pp.print("{d}", .{f});
             },
         }
     }
@@ -1221,7 +1221,7 @@ pub const TableConstructor = struct {
             while (i < self.fields.items.len - 1) : (i += 1) {
                 try pp.write("");
                 try self.fields.items[i].pretty(pp);
-                try pp.writeInline(", ");
+                try pp.write(", ");
                 try pp.nl();
             }
             try pp.write("");
@@ -1372,7 +1372,6 @@ pub const FunctionBody = struct {
             pp.dedent();
         }
         try pp.write("end");
-        try pp.nl();
     }
 };
 
@@ -1477,6 +1476,7 @@ pub const Program = struct {
         } else {
             for (self.statements) |stmt| {
                 try stmt.pretty(pp);
+                try pp.nl();
                 try pp.nl();
             }
         }

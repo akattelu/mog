@@ -223,8 +223,8 @@ function multiple(x, y, z)
   return x
 end
 
-if false then
-end
+if false then end
+if true then else end
 
 while false do
 end

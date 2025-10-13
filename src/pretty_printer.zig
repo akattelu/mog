@@ -6,12 +6,14 @@ const INDENT_SPACES = 2;
 pub const PrettyPrinter = struct {
     writer: *Writer,
     current_indent: u32,
+    at_line_start: bool,
 
     /// Initialize pretty printer with std.Io.Writer
     pub fn init(writer: *Writer) PrettyPrinter {
         return PrettyPrinter{
             .writer = writer,
             .current_indent = 0,
+            .at_line_start = true,
         };
     }
 
@@ -32,30 +34,25 @@ pub const PrettyPrinter = struct {
 
     /// Write contents to the pretty printer with the current indentation
     pub fn write(self: *PrettyPrinter, content: []const u8) Writer.Error!void {
-        // Write indentation spaces
-        _ = try self.writer.splatByte(' ', self.current_indent);
+        if (self.at_line_start) {
+            try self.writer.splatByteAll(' ', self.current_indent);
+            self.at_line_start = false;
+        }
         try self.writer.print("{s}", .{content});
     }
 
     /// Write a newline to the pretty printer
     pub fn nl(self: *PrettyPrinter) Writer.Error!void {
         try self.writer.writeByte('\n');
+        self.at_line_start = true;
     }
 
     /// Write contents to the pretty printer with the current indentation
     pub fn print(self: *PrettyPrinter, comptime fmt: []const u8, args: anytype) Writer.Error!void {
-        // Write indentation spaces
-        _ = try self.writer.splatByte(' ', self.current_indent);
-        try self.writer.print(fmt, args);
-    }
-
-    /// Write contents inline without indentation (for continuing on the same line)
-    pub fn writeInline(self: *PrettyPrinter, content: []const u8) Writer.Error!void {
-        try self.writer.print("{s}", .{content});
-    }
-
-    /// Print formatted content inline without indentation (for continuing on the same line)
-    pub fn printInline(self: *PrettyPrinter, comptime fmt: []const u8, args: anytype) Writer.Error!void {
+        if (self.at_line_start) {
+            try self.writer.splatByteAll(' ', self.current_indent);
+            self.at_line_start = false;
+        }
         try self.writer.print(fmt, args);
     }
 };
