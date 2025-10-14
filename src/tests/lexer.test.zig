@@ -156,3 +156,71 @@ test "float number parsing" {
         try std.testing.expectEqual(t.expectedType, tok.type);
     }
 }
+
+test "builtin tokens" {
+    // Test C builtin function tokens with $ prefix
+    const input = "$puts $malloc $printf $free_memory $fn123";
+
+    const tests = [_]struct {
+        expectedType: TokenType,
+        expectedLiteral: []const u8,
+    }{
+        .{ .expectedType = TokenType.builtin, .expectedLiteral = "$puts" },
+        .{ .expectedType = TokenType.builtin, .expectedLiteral = "$malloc" },
+        .{ .expectedType = TokenType.builtin, .expectedLiteral = "$printf" },
+        .{ .expectedType = TokenType.builtin, .expectedLiteral = "$free_memory" },
+        .{ .expectedType = TokenType.builtin, .expectedLiteral = "$fn123" },
+    };
+
+    const allocator = std.testing.allocator;
+    var lexer = try Lexer.init(allocator, input);
+    defer lexer.deinit();
+    for (tests) |t| {
+        const tok = (try lexer.nextToken()).*;
+        try std.testing.expectEqualStrings(t.expectedLiteral, tok.literal);
+        try std.testing.expectEqual(t.expectedType, tok.type);
+    }
+}
+
+test "builtin token position tracking" {
+    // Test that builtin tokens have correct position information
+    const input = "$puts $malloc";
+
+    const tests = [_]struct {
+        expectedType: TokenType,
+        expectedLiteral: []const u8,
+        expectedStart: u32,
+        expectedEnd: u32,
+    }{
+        .{ .expectedType = TokenType.builtin, .expectedLiteral = "$puts", .expectedStart = 0, .expectedEnd = 4 },
+        .{ .expectedType = TokenType.builtin, .expectedLiteral = "$malloc", .expectedStart = 6, .expectedEnd = 12 },
+    };
+
+    const allocator = std.testing.allocator;
+    var lexer = try Lexer.init(allocator, input);
+    defer lexer.deinit();
+    for (tests) |t| {
+        const tok = (try lexer.nextToken()).*;
+        try std.testing.expectEqualStrings(t.expectedLiteral, tok.literal);
+        try std.testing.expectEqual(t.expectedType, tok.type);
+        try std.testing.expectEqual(t.expectedStart, tok.start_pos);
+        try std.testing.expectEqual(t.expectedEnd, tok.end_pos);
+    }
+}
+
+test "builtin token invalid cases" {
+    // Test that $ followed by non-letter produces error
+    const allocator = std.testing.allocator;
+
+    // $ followed by digit should be illegal
+    var lexer1 = try Lexer.init(allocator, "$123");
+    defer lexer1.deinit();
+    const result1 = lexer1.nextToken();
+    try std.testing.expectError(Lexer.LexError.Illegal, result1);
+
+    // $ alone should be illegal when at end
+    var lexer2 = try Lexer.init(allocator, "$");
+    defer lexer2.deinit();
+    const result2 = lexer2.nextToken();
+    try std.testing.expectError(Lexer.LexError.Illegal, result2);
+}

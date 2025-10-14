@@ -532,7 +532,7 @@ pub const BreakStatement = struct {
 };
 
 /// The different types of expressions in the AST.
-pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member, FunctionCall, MethodCall };
+pub const ExpressionTypes = enum { Identifier, Number, String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member, FunctionCall, MethodCall, CBuiltin };
 
 /// A tagged union representing any expression in the language.
 /// Expressions are constructs that evaluate to values.
@@ -552,6 +552,7 @@ pub const Expression = union(ExpressionTypes) {
     Member: *MemberExpression,
     FunctionCall: *FunctionCallExpression,
     MethodCall: *MethodCallExpression,
+    CBuiltin: *CBuiltinExpression,
 
     /// Returns the literal text of the first token in this expression.
     /// Useful for debugging and error messages.
@@ -572,6 +573,7 @@ pub const Expression = union(ExpressionTypes) {
             .Member => |n| n.tokenLiteral(),
             .FunctionCall => |n| n.tokenLiteral(),
             .MethodCall => |n| n.tokenLiteral(),
+            .CBuiltin => |n| n.tokenLiteral(),
         };
     }
 
@@ -594,6 +596,7 @@ pub const Expression = union(ExpressionTypes) {
             .Member => |n| try n.write(writer),
             .FunctionCall => |n| try n.write(writer),
             .MethodCall => |n| try n.write(writer),
+            .CBuiltin => |n| try n.write(writer),
         }
     }
 
@@ -615,6 +618,7 @@ pub const Expression = union(ExpressionTypes) {
             .Member => |n| try n.pretty(pp),
             .FunctionCall => |n| try n.pretty(pp),
             .MethodCall => |n| try n.pretty(pp),
+            .CBuiltin => |n| try n.pretty(pp),
         }
     }
 };
@@ -641,6 +645,30 @@ pub const Identifier = struct {
     pub fn pretty(self: *const Identifier, pp: *PrettyPrinter) Writer.Error!void {
         // instead of write() and print() to keep expressions on single lines without adding indentation
         try pp.write(self.value);
+    }
+};
+
+/// Represents a C builtin function call (dynamically linked via QBE).
+/// Example: `$puts`, `$malloc`, `$printf`
+pub const CBuiltinExpression = struct {
+    /// The builtin token (includes $ prefix)
+    token: token.Token,
+    /// The full builtin name including $ prefix
+    name: []const u8,
+
+    /// Returns the literal text of the builtin token.
+    pub fn tokenLiteral(self: *const CBuiltinExpression) []const u8 {
+        return self.token.literal;
+    }
+
+    /// Writes the builtin name to the given writer.
+    pub fn write(self: *const CBuiltinExpression, writer: *Writer) Writer.Error!void {
+        _ = try writer.writeAll(self.name);
+    }
+
+    /// Pretty prints the builtin
+    pub fn pretty(self: *const CBuiltinExpression, pp: *PrettyPrinter) Writer.Error!void {
+        try pp.write(self.name);
     }
 };
 

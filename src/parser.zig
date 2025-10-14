@@ -116,6 +116,7 @@ pub const Parser = struct {
     const PrefixMap = std.StaticStringMap(PrefixParseFn).initComptime(.{
         // Literals
         .{ "ident", &parseIdentifierExpression },
+        .{ "builtin", &parseCBuiltinExpression },
         .{ "int", &parseIntegerExpression },
         .{ "float", &parseFloatExpression },
         .{ "string", &parseStringExpression },
@@ -754,6 +755,15 @@ pub const Parser = struct {
         const expr = try self.alloc.allocator().create(ast.Expression);
         const ident = try self.parseIdentifier();
         expr.* = .{ .Identifier = ident };
+        return expr;
+    }
+
+    fn parseCBuiltinExpression(self: *Parser) !*ast.Expression {
+        const expr = try self.alloc.allocator().create(ast.Expression);
+        const builtin = try self.alloc.allocator().create(ast.CBuiltinExpression);
+        builtin.token = self.current_token.*;
+        builtin.name = self.current_token.*.literal;
+        expr.* = .{ .CBuiltin = builtin };
         return expr;
     }
 

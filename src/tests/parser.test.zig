@@ -2673,3 +2673,94 @@ test "function call - mixed with index access" {
     try program.write(&writer.writer);
     try std.testing.expectEqualStrings("funcs[1](x);", writer.written());
 }
+
+test "builtin expression - standalone" {
+    const input = "$puts";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    try std.testing.expectEqual(@as(usize, 1), program.statements.len);
+    switch (program.statements[0].*) {
+        .Expression => |e| {
+            switch (e.expr.*) {
+                .CBuiltin => |builtin| {
+                    try std.testing.expectEqualStrings("$puts", builtin.name);
+                },
+                else => {
+                    std.debug.print("Expected CBuiltin expression, got {s}\n", .{@tagName(e.expr.*)});
+                    return error.WrongExpressionType;
+                },
+            }
+        },
+        else => return error.WrongStatementType,
+    }
+}
+
+test "builtin expression - as function call" {
+    const input = "$puts(\"hello\")";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("$puts(\"hello\");", writer.written());
+}
+
+test "builtin expression - in assignment" {
+    const input = "local x = $malloc(100)";
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    try std.testing.expectEqualStrings("local x = $malloc(100);", writer.written());
+}
+
+test "builtin expression - multiple builtins" {
+    const input =
+        \\$printf("x = %d\n", 42);
+        \\local ptr = $malloc(256);
+        \\$free(ptr)
+    ;
+
+    const allocator = std.testing.allocator;
+    var lexer = try lex.Lexer.init(allocator, input);
+    var parser = try Parser.init(allocator, &lexer);
+    defer lexer.deinit();
+    defer parser.deinit();
+    const program = try parser.parseProgram();
+    try assertNoErrors(&parser);
+
+    try std.testing.expectEqual(@as(usize, 3), program.statements.len);
+
+    var writer = std.Io.Writer.Allocating.init(allocator);
+    defer writer.deinit();
+    try program.write(&writer.writer);
+    const expected =
+        \\$printf("x = %d\n", 42);
+        \\local ptr = $malloc(256);
+        \\$free(ptr);
+        \\
+    ;
+    try std.testing.expectEqualStrings(expected, writer.written());
+}

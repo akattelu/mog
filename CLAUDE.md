@@ -229,3 +229,8 @@ Here is the grammar of Lua 5.4 - this can be useful when making updates to the m
 
 	unop ::= '-' | not | '#' | '~'
 ```
+
+## QBE
+
+The mog compiler uses QBE (binary stored in vendor/qbe/qbe) to output .s instruction files.
+The QBE IR documentation can be found at: https://c9x.me/compile/doc/il.html read the contents of the page before answering questions or writing qbe related code.

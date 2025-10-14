@@ -97,6 +97,23 @@ pub const Lexer = struct {
         return self.input[start_pos..self.position];
     }
 
+    fn readBuiltin(self: *Lexer) ![]const u8 {
+        const start_pos = self.position;
+        // Current character should be '$'
+        self.readChar(); // consume '$'
+
+        // Next character must be a letter for valid builtin
+        if (!isLetter(self.ch)) {
+            return LexError.Illegal;
+        }
+
+        // Read the identifier part
+        while (isLetter(self.ch) or self.ch == '_' or isDigit(self.ch)) {
+            self.readChar();
+        }
+        return self.input[start_pos..self.position];
+    }
+
     fn skipWhitespace(self: *Lexer) void {
         while (self.ch == '\r' or self.ch == '\n' or self.ch == ' ' or self.ch == '\t') {
             self.readChar();
@@ -298,6 +315,12 @@ pub const Lexer = struct {
                 const tok = try self.alloc.allocator().create(Token);
                 if (self.ch == '\"') {
                     tok.* = .{ .literal = self.readString(), .type = TokenType.string, .start_pos = @intCast(self.position - tok.literal.len), .end_pos = self.position - 1 };
+                    return tok;
+                } else if (self.ch == '$') {
+                    tok.literal = try self.readBuiltin();
+                    tok.type = TokenType.builtin;
+                    tok.start_pos = @intCast(self.position - tok.literal.len);
+                    tok.end_pos = self.position - 1;
                     return tok;
                 } else if (isLetter(self.ch)) {
                     tok.literal = try self.readIdent();

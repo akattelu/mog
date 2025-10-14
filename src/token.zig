@@ -6,6 +6,7 @@ pub const TokenType = enum {
     illegal,
     eof,
     ident,
+    builtin,
     int,
     float,
     assign,
