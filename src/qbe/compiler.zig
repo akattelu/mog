@@ -5,16 +5,17 @@ const Writer = std.Io.Writer;
 /// QBECompiler updates and emits a stored state for a QBE program
 pub const QBECompiler = struct {
     arena: std.heap.ArenaAllocator,
+    data: data.Data,
 
     /// Returns an initialized QBECompiler
     pub fn init(alloc: std.mem.Allocator) QBECompiler {
         const arena = std.heap.ArenaAllocator.init(alloc);
-        return .{ .arena = arena };
+        return .{ .arena = arena, .data = data.Data.init() };
     }
 
     /// Emit QBE IR to the writer
     pub fn emit(self: *QBECompiler, writer: *Writer) !void {
-        _ = self;
+        try self.data.emit(writer);
         const ssa_content =
             \\ # Define the string constant.
             \\ data $str = { b "hello world", b 0 }

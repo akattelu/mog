@@ -4,9 +4,11 @@ const DataDefinition = data.DataDefinition;
 const Data = data.Data;
 
 test "writing string data definition" {
+    // Make writer
     const alloc = std.testing.allocator;
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
+
     const test_cases = [_]struct { input: struct { idx: u32, string: []const u8 }, expected: []const u8 }{
         .{ .input = .{ .idx = 0, .string = "hello world" }, .expected = 
         \\data $str_0 = { b "hello world", b 0 }
@@ -17,6 +19,7 @@ test "writing string data definition" {
     };
 
     inline for (test_cases) |case| {
+        // Check writer contents
         const def = DataDefinition.fromString(case.input.idx, case.input.string);
         try def.write(&writer.writer);
         try std.testing.expectEqualStrings(case.expected, writer.written());
