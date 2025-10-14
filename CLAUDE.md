@@ -4,14 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-**mog** is a Lua-based language interpreter written in Zig. The project implements a lexer, parser, and AST for a Lua-like language with slight modifications to support type declarations. This is a compiler/interpreter project following traditional parsing architecture.
-
-## Language Grammar
-
-The language grammar is defined in AGENTS.md and follows Lua's BNF grammar with adaptations for type annotations. Key syntax includes:
-- Statements: `local`, `return`, `if-then-else-end`, function definitions
-- Expressions: literals (integers, booleans, strings), infix/prefix operations, conditionals
-- Type annotations: `local name: type = value`
+**mog** is a Lua-based language interpreter written in Zig. The project implements a lexer, parser, AST, and pretty printer for a Lua-like language. This is a compiler/interpreter project following traditional parsing architecture with support for Lua 5.4 syntax including loops, functions, tables, and operators.
 
 ## Build Commands
 
@@ -25,14 +18,26 @@ zig build run -- repl --lex
 # Run the REPL in parser mode
 zig build run -- repl --parse
 
+# Parse a Lua file and output the AST
+zig build run -- parse <file>
+
+# Format a Lua file with pretty printing
+zig build run -- fmt <file>
+
+# Show help message
+zig build run -- help
+
 # Run all tests
 zig build test
 
-# Type-check without building
-zig build check
+# Format all Zig source files
+zig fmt .
 
-# Install git hooks
+# Install git hooks (runs format check, build, and tests before commits)
 zig build install-git-hooks
+
+# Build release binaries for multiple targets
+zig build -Drelease=true
 ```
 
 ## Architecture
@@ -42,40 +47,69 @@ zig build install-git-hooks
 1. **Lexer** (`src/lexer.zig`): Tokenizes input source code
    - Uses arena allocator for token memory management
    - Tracks token positions (start_pos, end_pos) for error reporting
-   - Supports strings, identifiers, integers, keywords, operators
+   - Supports strings, identifiers, integers, floats, keywords, and operators
+   - Handles multi-character operators (==, ~=, //, .., ..., <<, >>, etc.)
 
 2. **Token** (`src/token.zig`): Token types and definitions
-   - Keyword map for reserved words (`function`, `local`, `if`, `else`, `return`, `not`, `and`, `or`, `nil`, etc.)
-   - Static string maps for efficient keyword lookup
+   - Comprehensive TokenType enum covering all Lua operators and keywords
+   - Keyword map for reserved words: `function`, `local`, `if`, `else`, `elseif`, `return`, `not`, `and`, `or`, `nil`, `while`, `repeat`, `for`, `break`, `do`, `end`, `then`, `until`, `in`, `goto`, `type`
+   - Static string maps for efficient O(1) keyword lookup
 
-3. **Parser** (`src/parser.zig`): Pratt parser for expression parsing
+3. **Parser** (`src/parser.zig`): Pratt parser implementing Lua 5.4 grammar
    - Implements precedence-based parsing for infix/prefix operators
    - Uses prefix/infix function maps for extensibility
    - Arena allocator for AST node allocation
-   - Precedence levels: lowest, equals, lessgreater, sum, product, prefix, call
+   - **Precedence levels** (lowest to highest): lowest, logical_or, logical_and, comparison, bitwise_or, bitwise_xor, bitwise_and, bitwise_shift, concat, sum, product, unary, exponent, call
+   - Supports right-associative operators (^ and ..)
+   - Comprehensive error reporting with token position information
 
 4. **AST** (`src/ast.zig`): Abstract Syntax Tree node definitions
-   - Statement types: Let, Return, Expression
-   - Expression types: Identifier, Integer, Boolean, Prefix, Infix, Conditional
-   - All nodes implement `tokenLiteral()` and `write(Writer)` methods
-   - Uses tagged unions for polymorphic node types
+   - **Statement types**: Assignment, Return, Expression, FunctionDeclaration, Do, While, Repeat, ForNumeric, ForGeneric, Break
+   - **Expression types**: Identifier, Number (int/float), String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member, FunctionCall, MethodCall
+   - All nodes implement `tokenLiteral()`, `write(Writer)`, and `pretty(PrettyPrinter)` methods
+   - Uses tagged unions for type-safe polymorphic node types
 
-5. **Main** (`src/main.zig`): REPL entry point
-   - Supports `--lex` mode (tokenization only) and `--parse` mode (full parsing)
-   - Uses custom `std.Io.Writer` interface for output buffering
+5. **Pretty Printer** (`src/pretty_printer.zig`): Formats AST back to readable Lua code
+   - Manages indentation levels for nested structures
+   - Handles proper newline placement for blocks
+   - Used by the `fmt` command to format Lua source files
+
+6. **Main** (`src/main.zig`): CLI entry point with command routing
+   - Command map routes to: `repl`, `parse`, `fmt`, `help`
+   - REPL supports `--lex` mode (tokenization only) and `--parse` mode (full parsing)
+   - Uses custom `std.Io.Writer` interface for buffered output
 
 ### Memory Management
 
 - Arena allocators used throughout for simplified memory management
-- Lexer and Parser each maintain their own arena
+- Lexer and Parser each maintain their own arena allocator
 - All allocations cleaned up via `deinit()` methods
+- AST nodes allocated in parser's arena and freed when parser is deinitialized
 
 ### Key Design Patterns
 
 - **Writer Interface**: Custom `std.Io.Writer` abstraction used for all output (tokens, AST nodes)
 - **Tagged Unions**: Statement and Expression types use Zig's tagged unions for type-safe polymorphism
-- **Static String Maps**: Efficient O(1) keyword and precedence lookups
-- **Pratt Parsing**: Operator precedence handled through precedence climbing
+- **Static String Maps**: Efficient O(1) keyword and precedence lookups using compile-time string maps
+- **Pratt Parsing**: Operator precedence handled through precedence climbing algorithm
+- **Visitor Pattern**: `write()` and `pretty()` methods traverse AST for output generation
+
+### Supported Lua Features
+
+- **Variables**: local and global assignments, multiple assignment
+- **Control Flow**: if-then-else-end, while-do-end, repeat-until, do-end blocks, break
+- **Loops**: numeric for loops (`for i = 1, 10, 2 do`), generic for loops (`for k, v in pairs(t) do`)
+- **Functions**: function declarations (local and global), function expressions, varargs (...)
+- **Operators**:
+  - Arithmetic: +, -, *, /, //, %, ^
+  - Comparison: ==, ~=, <, >, <=, >=
+  - Logical: and, or, not
+  - Bitwise: &, |, ~, <<, >>
+  - String: .. (concatenation)
+  - Length: #
+- **Tables**: table constructors with array-style, record-style, and computed-key fields
+- **Calls**: function calls, method calls with : syntax
+- **Access**: member access (.), index access ([])
 
 ### Testing
 
@@ -84,24 +118,32 @@ Tests are organized in `src/tests/` directory with separate files for each modul
 - `src/tests/parser.test.zig`: Statement parsing, expression parsing, operator precedence
 - `src/tests/ast.test.zig`: String representation via `write()` methods
 - `src/tests/token.test.zig`: Token type and keyword mapping tests
+- `src/tests/pretty_printer.test.zig`: Pretty printing functionality
 
-**Important**: To prevent Zig's dead code elimination from removing test files, they are explicitly referenced in `src/main.zig` (lines 15-18) as public declarations:
+**Important**: To prevent Zig's dead code elimination from removing test files, they are explicitly referenced in `src/main.zig` (lines 219-233) as public declarations in a test block:
 ```zig
-pub const parser_tests = @import("tests/parser.test.zig");
-pub const lexer_tests = @import("tests/lexer.test.zig");
-pub const token_tests = @import("tests/token.test.zig");
-pub const ast_tests = @import("tests/ast.test.zig");
-```
+test {
+    const parser_tests = @import("tests/parser.test.zig");
+    const lexer_tests = @import("tests/lexer.test.zig");
+    const token_tests = @import("tests/token.test.zig");
+    const ast_tests = @import("tests/ast.test.zig");
+    const pretty_printer_tests = @import("tests/pretty_printer.test.zig");
 
-Additionally, `src/main.zig` includes a test block that references all declarations (`std.testing.refAllDecls(@This())`) to ensure test discovery.
+    std.testing.refAllDecls(token_tests);
+    std.testing.refAllDecls(lexer_tests);
+    std.testing.refAllDecls(parser_tests);
+    std.testing.refAllDecls(ast_tests);
+    std.testing.refAllDecls(pretty_printer_tests);
+}
+```
 
 ## Development Notes
 
 - The parser uses `expectAndPeek()` pattern for token consumption with error handling
-- Error messages include token position information for debugging
+- Error messages include token position information for debugging via `setErrExpected()` and `setErrExpectedAny()` methods
 - The `Block` type is aliased to `Program` (both are statement collections)
-- Boolean literal parsing includes logging (see `parseBooleanExpression` in parser.zig:326)
-- In zig 0.15 there are new interfaces for std.Io.Writer and std.Io.Reader (note the capital Io instead of lowercase io). Use tools to understand the new interface when you want to use or revise these interfaces.
+- In Zig 0.15+ there are new interfaces for `std.Io.Writer` and `std.Io.Reader` (note the capital `Io` instead of lowercase `io`). Use MCP tools to understand the new interface when revising I/O code.
+- The pre-commit hook (`.githooks/pre-commit`) runs formatting check, build, and tests before allowing commits
 
 ## Zig Documentation
 
@@ -116,75 +158,74 @@ This ensures accurate usage of Zig APIs and prevents outdated or incorrect infor
 
 ## Lua Reference Grammar
 
-Here is the grammar of lua 5.4 - this can be useful when making updates to the mog parser
+Here is the grammar of Lua 5.4 - this can be useful when making updates to the mog parser:
 
 ```bnf
 	chunk ::= block
 
 	block ::= {stat} [retstat]
 
-	stat ::=  ‘;’ | 
-		 varlist ‘=’ explist | 
-		 functioncall | 
-		 label | 
-		 break | 
-		 goto Name | 
-		 do block end | 
-		 while exp do block end | 
-		 repeat block until exp | 
-		 if exp then block {elseif exp then block} [else block] end | 
-		 for Name ‘=’ exp ‘,’ exp [‘,’ exp] do block end | 
-		 for namelist in explist do block end | 
-		 function funcname funcbody | 
-		 local function Name funcbody | 
-		 local attnamelist [‘=’ explist] 
+	stat ::=  ';' |
+		 varlist '=' explist |
+		 functioncall |
+		 label |
+		 break |
+		 goto Name |
+		 do block end |
+		 while exp do block end |
+		 repeat block until exp |
+		 if exp then block {elseif exp then block} [else block] end |
+		 for Name '=' exp ',' exp [',' exp] do block end |
+		 for namelist in explist do block end |
+		 function funcname funcbody |
+		 local function Name funcbody |
+		 local attnamelist ['=' explist]
 
-	attnamelist ::=  Name attrib {‘,’ Name attrib}
+	attnamelist ::=  Name attrib {',' Name attrib}
 
-	attrib ::= [‘<’ Name ‘>’]
+	attrib ::= ['<' Name '>']
 
-	retstat ::= return [explist] [‘;’]
+	retstat ::= return [explist] [';']
 
-	label ::= ‘::’ Name ‘::’
+	label ::= '::' Name '::'
 
-	funcname ::= Name {‘.’ Name} [‘:’ Name]
+	funcname ::= Name {'.' Name} [':' Name]
 
-	varlist ::= var {‘,’ var}
+	varlist ::= var {',' var}
 
-	var ::=  Name | prefixexp ‘[’ exp ‘]’ | prefixexp ‘.’ Name 
+	var ::=  Name | prefixexp '[' exp ']' | prefixexp '.' Name
 
-	namelist ::= Name {‘,’ Name}
+	namelist ::= Name {',' Name}
 
-	explist ::= exp {‘,’ exp}
+	explist ::= exp {',' exp}
 
-	exp ::=  nil | false | true | Numeral | LiteralString | ‘...’ | functiondef | 
-		 prefixexp | tableconstructor | exp binop exp | unop exp 
+	exp ::=  nil | false | true | Numeral | LiteralString | '...' | functiondef |
+		 prefixexp | tableconstructor | exp binop exp | unop exp
 
-	prefixexp ::= var | functioncall | ‘(’ exp ‘)’
+	prefixexp ::= var | functioncall | '(' exp ')'
 
-	functioncall ::=  prefixexp args | prefixexp ‘:’ Name args 
+	functioncall ::=  prefixexp args | prefixexp ':' Name args
 
-	args ::=  ‘(’ [explist] ‘)’ | tableconstructor | LiteralString 
+	args ::=  '(' [explist] ')' | tableconstructor | LiteralString
 
 	functiondef ::= function funcbody
 
-	funcbody ::= ‘(’ [parlist] ‘)’ block end
+	funcbody ::= '(' [parlist] ')' block end
 
-	parlist ::= namelist [‘,’ ‘...’] | ‘...’
+	parlist ::= namelist [',' '...'] | '...'
 
-	tableconstructor ::= ‘{’ [fieldlist] ‘}’
+	tableconstructor ::= '{' [fieldlist] '}'
 
 	fieldlist ::= field {fieldsep field} [fieldsep]
 
-	field ::= ‘[’ exp ‘]’ ‘=’ exp | Name ‘=’ exp | exp
+	field ::= '[' exp ']' '=' exp | Name '=' exp | exp
 
-	fieldsep ::= ‘,’ | ‘;’
+	fieldsep ::= ',' | ';'
 
-	binop ::=  ‘+’ | ‘-’ | ‘*’ | ‘/’ | ‘//’ | ‘^’ | ‘%’ | 
-		 ‘&’ | ‘~’ | ‘|’ | ‘>>’ | ‘<<’ | ‘..’ | 
-		 ‘<’ | ‘<=’ | ‘>’ | ‘>=’ | ‘==’ | ‘~=’ | 
+	binop ::=  '+' | '-' | '*' | '/' | '//' | '^' | '%' |
+		 '&' | '~' | '|' | '>>' | '<<' | '..' |
+		 '<' | '<=' | '>' | '>=' | '==' | '~=' |
 		 and | or
 
-	unop ::= ‘-’ | not | ‘#’ | ‘~’
-
+	unop ::= '-' | not | '#' | '~'
 ```
