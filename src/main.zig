@@ -229,7 +229,7 @@ pub fn build(args: *std.process.ArgIterator) CommandErrUnion!u8 {
         return try help(args);
     }
 
-    var compiler = QBECompiler.init(std.heap.page_allocator);
+    var compiler = try QBECompiler.init(std.heap.page_allocator);
     try compiler.emitFile(output_file.?);
 
     return 0;

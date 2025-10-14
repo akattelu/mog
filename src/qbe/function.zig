@@ -231,3 +231,41 @@ pub const Function = struct {
         try writer.print("}}\n", .{});
     }
 };
+
+/// Struct corresponding to function section of QBE IR (array of function definitions)
+pub const FunctionSection = struct {
+    functions: std.ArrayList(*Function),
+    allocator: std.mem.Allocator,
+
+    /// Create new function section
+    pub fn init(allocator: std.mem.Allocator) FunctionSection {
+        return .{
+            .functions = std.ArrayList(*Function).empty,
+            .allocator = allocator,
+        };
+    }
+
+    /// Deinitialize the function section and free all functions
+    pub fn deinit(self: *FunctionSection) void {
+        for (self.functions.items) |func| {
+            func.deinit();
+        }
+        self.functions.deinit(self.allocator);
+    }
+
+    /// Add a function to the section
+    pub fn add(self: *FunctionSection, func: *Function) !void {
+        try self.functions.append(self.allocator, func);
+    }
+
+    /// Emit IR for the function section
+    pub fn emit(self: *const FunctionSection, writer: *std.Io.Writer) !void {
+        for (self.functions.items, 0..) |func, i| {
+            try func.emit(writer);
+            // Add newline between functions (but not after the last one)
+            if (i < self.functions.items.len - 1) {
+                try writer.writeByte('\n');
+            }
+        }
+    }
+};

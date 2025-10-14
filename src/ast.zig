@@ -1,6 +1,8 @@
 const std = @import("std");
 const token = @import("token.zig");
 const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
+const qbe = @import("qbe/compiler.zig");
+const Compiler = qbe.QBECompiler;
 const Writer = std.Io.Writer;
 const AllocatorError = std.mem.Allocator.Error;
 const testing = std.testing;
@@ -74,6 +76,14 @@ pub const Statement = union(StatementTypes) {
             .ForNumeric => |n| try n.pretty(pp),
             .ForGeneric => |n| try n.pretty(pp),
             .Break => |n| try n.pretty(pp),
+        }
+    }
+
+    /// Emit IR with Compiler
+    pub fn compile(self: *const Statement, c: *Compiler) !void {
+        switch (self.*) {
+            .Expression => |n| try n.compile(c),
+            else => unreachable,
         }
     }
 };
@@ -243,6 +253,12 @@ pub const ExpressionStatement = struct {
     /// Pretty prints the expression statement
     pub fn pretty(self: *const ExpressionStatement, pp: *PrettyPrinter) Writer.Error!void {
         try self.expr.pretty(pp);
+    }
+
+    /// Emit IR with Compiler
+    pub fn compile(self: *const ExpressionStatement, c: *Compiler) !void {
+        _ = self;
+        _ = c;
     }
 };
 
@@ -621,6 +637,14 @@ pub const Expression = union(ExpressionTypes) {
             .CBuiltin => |n| try n.pretty(pp),
         }
     }
+
+    /// Emit IR with Compiler
+    pub fn compile(self: *const Expression, c: *Compiler) !void {
+        switch (self.*) {
+            .FunctionCall => |n| try n.compile(c),
+            else => unreachable,
+        }
+    }
 };
 
 /// Represents a variable or function name identifier.
@@ -854,6 +878,17 @@ pub const FunctionCallExpression = struct {
     pub fn pretty(self: *const FunctionCallExpression, pp: *PrettyPrinter) Writer.Error!void {
         try self.function.pretty(pp);
         try self.args.pretty(pp);
+    }
+
+    /// Emit IR with Compiler
+    pub fn compile(self: *const FunctionCallExpression, c: *Compiler) !void {
+        _ = c;
+        switch (self.function.*) {
+            .CBuiltin => {
+                // FIXME: add instruction to call builtin
+            },
+            else => unreachable,
+        }
     }
 };
 
@@ -1508,5 +1543,11 @@ pub const Program = struct {
                 try pp.nl();
             }
         }
+    }
+
+    /// Emit IR with Compiler
+    pub fn compile(self: *const Program, c: *Compiler) !void {
+        _ = self;
+        _ = c;
     }
 };

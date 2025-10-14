@@ -1,34 +1,45 @@
 const std = @import("std");
 const data = @import("data.zig");
+pub const Data = data;
+const function = @import("function.zig");
 const Writer = std.Io.Writer;
+const FunctionSection = function.FunctionSection;
+const Function = function.Function;
 
 /// QBECompiler updates and emits a stored state for a QBE program
 pub const QBECompiler = struct {
     arena: std.heap.ArenaAllocator,
     data: data.Data,
+    functions: FunctionSection,
+    current_function: *Function,
 
     /// Returns an initialized QBECompiler
-    pub fn init(alloc: std.mem.Allocator) QBECompiler {
-        const arena = std.heap.ArenaAllocator.init(alloc);
-        return .{ .arena = arena, .data = data.Data.init() };
+    pub fn init(alloc: std.mem.Allocator) !QBECompiler {
+        var arena = std.heap.ArenaAllocator.init(alloc);
+        const arena_allocator = arena.allocator();
+
+        var functions = FunctionSection.init(arena_allocator);
+
+        // Add main function
+        var main = try Function.init(arena_allocator, "main", .w, .@"export");
+        try functions.add(&main);
+
+        const start_block = try function.Block.init(arena_allocator, "start");
+        // TODO: consider updating this functions signature to take a reference
+        try main.addBlock(start_block);
+
+        return .{
+            .arena = arena,
+            .data = data.Data.init(),
+            .functions = functions,
+            .current_function = &main,
+        };
     }
 
     /// Emit QBE IR to the writer
     pub fn emit(self: *QBECompiler, writer: *Writer) !void {
         try self.data.emit(writer);
-        const ssa_content =
-            \\ # Define the string constant.
-            \\ data $str = { b "hello world", b 0 }
-            \\ 
-            \\ export function w $main() {
-            \\ @start
-            \\         # Call the puts function with $str as argument.
-            \\         %r =w call $puts(l $str)
-            \\         ret 0
-            \\ }
-        ;
-
-        try writer.writeAll(ssa_content);
+        try self.functions.emit(writer);
         try writer.flush();
         return;
     }

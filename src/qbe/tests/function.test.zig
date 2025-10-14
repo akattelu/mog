@@ -1,6 +1,7 @@
 const std = @import("std");
 const function = @import("../function.zig");
 const Function = function.Function;
+const FunctionSection = function.FunctionSection;
 const Block = function.Block;
 const Instruction = function.Instruction;
 const Call = function.Call;
@@ -133,5 +134,72 @@ test "emit void function with no parameters" {
         "}\n";
 
     try func.emit(&writer.writer);
+    try std.testing.expectEqualStrings(expected, writer.written());
+}
+
+test "emit function section with multiple functions" {
+    // Initialize writer
+    const alloc = std.testing.allocator;
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+
+    // Create function section
+    var section = FunctionSection.init(alloc);
+    defer section.deinit();
+
+    // Create first function: function w $add(w %a, w %b)
+    var func1 = try Function.init(alloc, "add", .w, .none);
+    try func1.addParameter(.{ .name = "a", .param_type = .w });
+    try func1.addParameter(.{ .name = "b", .param_type = .w });
+
+    var block1 = try Block.init(alloc, "start");
+    const args1 = [_][]const u8{ "w %a", "w %b" };
+    try block1.addInstruction(.{
+        .lhs = "result",
+        .assign_type = .w,
+        .rhs = .{ .call = .{ .function_name = "internal_add", .args = &args1 } },
+    });
+    try block1.addInstruction(.{
+        .lhs = null,
+        .assign_type = null,
+        .rhs = .{ .ret = .{ .value = "%result" } },
+    });
+    try func1.addBlock(block1);
+
+    // Create second function: export function w $main()
+    var func2 = try Function.init(alloc, "main", .w, .@"export");
+
+    var block2 = try Block.init(alloc, "start");
+    const args2 = [_][]const u8{"l $str"};
+    try block2.addInstruction(.{
+        .lhs = "r",
+        .assign_type = .w,
+        .rhs = .{ .call = .{ .function_name = "puts", .args = &args2 } },
+    });
+    try block2.addInstruction(.{
+        .lhs = null,
+        .assign_type = null,
+        .rhs = .{ .ret = .{ .value = "0" } },
+    });
+    try func2.addBlock(block2);
+
+    // Add functions to section
+    try section.add(&func1);
+    try section.add(&func2);
+
+    // Emit and verify
+    const expected = "function w $add(w %a, w %b) {\n" ++
+        "@start\n" ++
+        "\t%result =w call $internal_add(w %a, w %b)\n" ++
+        "\tret %result\n" ++
+        "}\n" ++
+        "\n" ++
+        "export function w $main() {\n" ++
+        "@start\n" ++
+        "\t%r =w call $puts(l $str)\n" ++
+        "\tret 0\n" ++
+        "}\n";
+
+    try section.emit(&writer.writer);
     try std.testing.expectEqualStrings(expected, writer.written());
 }
