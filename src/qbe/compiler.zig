@@ -1,4 +1,5 @@
 const std = @import("std");
+const data = @import("data.zig");
 const Writer = std.Io.Writer;
 
 /// QBECompiler updates and emits a stored state for a QBE program

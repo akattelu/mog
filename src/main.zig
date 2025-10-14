@@ -12,7 +12,7 @@ const Parser = p.Parser;
 const ParserError = p.Parser.ParserError;
 pub const token = @import("token.zig");
 const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
-const QBECompiler = @import("qbe_compiler.zig").QBECompiler;
+const QBECompiler = @import("qbe/compiler.zig").QBECompiler;
 
 const CommandErrUnion = (std.mem.Allocator.Error || std.Io.Writer.Error || Lexer.LexError || ParserError || std.fmt.ParseIntError || std.fs.File.OpenError || std.Io.Reader.Error);
 const Command = *const fn (args: *std.process.ArgIterator) CommandErrUnion!u8;
@@ -242,10 +242,12 @@ test {
     const token_tests = @import("tests/token.test.zig");
     const ast_tests = @import("tests/ast.test.zig");
     const pretty_printer_tests = @import("tests/pretty_printer.test.zig");
+    const qbe_data_tests = @import("qbe/tests/data.test.zig");
 
     std.testing.refAllDecls(token_tests);
     std.testing.refAllDecls(lexer_tests);
     std.testing.refAllDecls(parser_tests);
     std.testing.refAllDecls(ast_tests);
     std.testing.refAllDecls(pretty_printer_tests);
+    std.testing.refAllDecls(qbe_data_tests);
 }
