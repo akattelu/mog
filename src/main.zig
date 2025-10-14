@@ -12,6 +12,7 @@ const Parser = p.Parser;
 const ParserError = p.Parser.ParserError;
 pub const token = @import("token.zig");
 const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
+const QBECompiler = @import("qbe_compiler.zig").QBECompiler;
 
 const CommandErrUnion = (std.mem.Allocator.Error || std.Io.Writer.Error || Lexer.LexError || ParserError || std.fmt.ParseIntError || std.fs.File.OpenError || std.Io.Reader.Error);
 const Command = *const fn (args: *std.process.ArgIterator) CommandErrUnion!u8;
@@ -20,6 +21,7 @@ const command_map = std.StaticStringMap(Command).initComptime(.{
     .{ "parse", &parse_file },
     .{ "fmt", &fmt_file },
     .{ "help", &help },
+    .{ "build", &build },
 });
 
 pub fn main() !void {
@@ -53,11 +55,12 @@ pub fn help(args: *std.process.ArgIterator) CommandErrUnion!u8 {
         \\  mog <command> [options]
         \\
         \\COMMANDS:
-        \\  help                 Show this help message
-        \\  repl --lex           Start REPL in lexer mode (tokenization only)
-        \\  repl --parse         Start REPL in parser mode (full parsing)
-        \\  parse <file>         Parse a Lua file and output the AST
-        \\  fmt <file>           Format a Lua file with pretty printing
+        \\  help                                     Show this help message
+        \\  repl --lex                               Start REPL in lexer mode (tokenization only)
+        \\  repl --parse                             Start REPL in parser mode (full parsing)
+        \\  parse <file>                             Parse a Lua file and output the AST
+        \\  fmt <file>                               Format a Lua file with pretty printing
+        \\  build <input_file> -o <output_file>k     Compile a lua file to an output QBE SSA file
         \\
         \\EXAMPLES:
         \\  mog help
@@ -65,7 +68,7 @@ pub fn help(args: *std.process.ArgIterator) CommandErrUnion!u8 {
         \\  mog repl --parse
         \\  mog parse script.lua
         \\  mog fmt script.lua
-        \\
+        \\  mog build script.lua -o out.ssa
     ;
 
     print("{s}", .{help_text});
@@ -212,6 +215,22 @@ pub fn fmt_file(args: *std.process.ArgIterator) CommandErrUnion!u8 {
     var pp = PrettyPrinter.init(&writer.interface);
     try program.pretty(&pp);
     try writer.interface.flush();
+
+    return 0;
+}
+
+pub fn build(args: *std.process.ArgIterator) CommandErrUnion!u8 {
+    const input_file = args.next();
+    const o_flag = args.next();
+    const output_file = args.next();
+
+    if (input_file == null or o_flag == null or output_file == null or (!std.mem.eql(u8, "-o", o_flag.?))) {
+        std.log.err("unexpected arguments for build", .{});
+        return try help(args);
+    }
+
+    var compiler = QBECompiler.init(std.heap.page_allocator);
+    try compiler.emitFile(output_file.?);
 
     return 0;
 }
