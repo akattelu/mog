@@ -163,24 +163,21 @@ pub const Function = struct {
     current_block: *Block,
 
     /// Initialize a new function with the given name and linkage
+    /// name needs to outlive the struct lifetime
     pub fn init(
         allocator: std.mem.Allocator,
         name: []const u8,
         return_type: ?Type,
         linkage: Linkage,
     ) !Function {
-        // TODO(human): Both the "start" string literal and the name parameter need to be
-        // duplicated to the heap. Add these lines after the start_block allocation:
-        //   const start_label = try allocator.dupe(u8, "start");
-        //   start_block.* = try Block.init(allocator, start_label);
-        //   const name_copy = try allocator.dupe(u8, name);
-        // Then use name_copy in the Function initialization below instead of name.
 
+        // Copy name
+        const copied_name = try allocator.dupe(u8, name);
         // every function starts with a @start block
         const start_block = try allocator.create(Block);
         start_block.* = try Block.init(allocator, "start");
         var func: Function = .{
-            .name = name,
+            .name = copied_name,
             .return_type = return_type,
             .linkage = linkage,
             .params = try std.ArrayList(*Parameter).initCapacity(allocator, 4),
@@ -202,6 +199,7 @@ pub const Function = struct {
             self.allocator.destroy(block);
         }
         self.blocks.deinit();
+        self.allocator.free(self.name);
     }
 
     /// Add a parameter to the function signature
