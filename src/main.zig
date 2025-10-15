@@ -229,7 +229,27 @@ pub fn build(args: *std.process.ArgIterator) CommandErrUnion!u8 {
         return try help(args);
     }
 
+    // Open file
+    const file_handle = try std.fs.cwd().openFile(input_file.?, .{});
+    const stat = try file_handle.stat();
+    const file_size = stat.size;
+
+    // Read contents
+    var input_buffer: [2048]u8 = undefined;
+    var reader = file_handle.reader(&input_buffer);
+    const alloc = std.heap.smp_allocator;
+    const file_data = try reader.interface.readAlloc(alloc, file_size);
+
+    // Create and run parser
+    var lexer = try Lexer.init(alloc, file_data);
+    var parser = try Parser.init(alloc, &lexer);
+    const program = try parser.parseProgram();
+
+    // Create a compiler and compile
     var compiler = try QBECompiler.init(std.heap.page_allocator);
+    try program.compile(&compiler);
+
+    // Output the final ssa file
     try compiler.emitFile(output_file.?);
 
     return 0;

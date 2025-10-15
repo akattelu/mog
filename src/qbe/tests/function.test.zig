@@ -7,6 +7,7 @@ const Instruction = function.Instruction;
 const Call = function.Call;
 const Ret = function.Ret;
 const Parameter = function.Parameter;
+const Argument = function.Argument;
 const Type = function.Type;
 const Linkage = function.Linkage;
 
@@ -26,25 +27,23 @@ test "emit simple function with return" {
     try func.addParameter(&param_a);
     try func.addParameter(&param_b);
 
-    // Create start block
-    var start_block = try Block.init(alloc, "start");
-
-    // Add call instruction: %result =w call $internal_add(w %a, w %b)
-    const args = [_][]const u8{ "w %a", "w %b" };
-    try start_block.addInstruction(.{
+    // Add instructions to the start block (automatically created by Function.init)
+    const args = [_]Argument{
+        .{ .arg_type = .w, .value = "%a" },
+        .{ .arg_type = .w, .value = "%b" },
+    };
+    try func.current_block.addInstruction(.{
         .lhs = "result",
         .assign_type = .w,
         .rhs = .{ .call = .{ .function_name = "internal_add", .args = &args } },
     });
 
     // Add return instruction: ret %result
-    try start_block.addInstruction(.{
+    try func.current_block.addInstruction(.{
         .lhs = null,
         .assign_type = null,
         .rhs = .{ .ret = .{ .value = "%result" } },
     });
-
-    try func.addBlock(&start_block);
 
     // Emit and verify
     const expected = "function w $add(w %a, w %b) {\n" ++
@@ -67,25 +66,22 @@ test "emit exported function with multiple blocks" {
     var func = try Function.init(alloc, "main", .w, .@"export");
     defer func.deinit();
 
-    // Create start block
-    var start_block = try Block.init(alloc, "start");
-
-    // Add call instruction: %r =w call $puts(l $str)
-    const args = [_][]const u8{"l $str"};
-    try start_block.addInstruction(.{
+    // Add instructions to the start block (automatically created by Function.init)
+    const args = [_]Argument{
+        .{ .arg_type = .l, .value = "$str" },
+    };
+    try func.current_block.addInstruction(.{
         .lhs = "r",
         .assign_type = .w,
         .rhs = .{ .call = .{ .function_name = "puts", .args = &args } },
     });
 
     // Add return instruction: ret 0
-    try start_block.addInstruction(.{
+    try func.current_block.addInstruction(.{
         .lhs = null,
         .assign_type = null,
         .rhs = .{ .ret = .{ .value = "0" } },
     });
-
-    try func.addBlock(&start_block);
 
     // Emit and verify
     const expected = "export function w $main() {\n" ++
@@ -108,29 +104,24 @@ test "emit void function with no parameters" {
     var func = try Function.init(alloc, "cleanup", null, .none);
     defer func.deinit();
 
-    // Create block
-    var block = try Block.init(alloc, "entry");
-
-    // Add void call: call $free()
-    const no_args = [_][]const u8{};
-    try block.addInstruction(.{
+    // Add instructions to the start block (automatically created by Function.init)
+    const no_args = [_]Argument{};
+    try func.current_block.addInstruction(.{
         .lhs = null,
         .assign_type = null,
         .rhs = .{ .call = .{ .function_name = "free", .args = &no_args } },
     });
 
     // Add void return: ret
-    try block.addInstruction(.{
+    try func.current_block.addInstruction(.{
         .lhs = null,
         .assign_type = null,
         .rhs = .{ .ret = .{ .value = null } },
     });
 
-    try func.addBlock(&block);
-
     // Emit and verify
     const expected = "function $cleanup() {\n" ++
-        "@entry\n" ++
+        "@start\n" ++
         "\tcall $free()\n" ++
         "\tret\n" ++
         "}\n";
@@ -156,36 +147,37 @@ test "emit function section with multiple functions" {
     try func1.addParameter(&param_a);
     try func1.addParameter(&param_b);
 
-    var block1 = try Block.init(alloc, "start");
-    const args1 = [_][]const u8{ "w %a", "w %b" };
-    try block1.addInstruction(.{
+    const args1 = [_]Argument{
+        .{ .arg_type = .w, .value = "%a" },
+        .{ .arg_type = .w, .value = "%b" },
+    };
+    try func1.current_block.addInstruction(.{
         .lhs = "result",
         .assign_type = .w,
         .rhs = .{ .call = .{ .function_name = "internal_add", .args = &args1 } },
     });
-    try block1.addInstruction(.{
+    try func1.current_block.addInstruction(.{
         .lhs = null,
         .assign_type = null,
         .rhs = .{ .ret = .{ .value = "%result" } },
     });
-    try func1.addBlock(&block1);
 
     // Create second function: export function w $main()
     var func2 = try Function.init(alloc, "main", .w, .@"export");
 
-    var block2 = try Block.init(alloc, "start");
-    const args2 = [_][]const u8{"l $str"};
-    try block2.addInstruction(.{
+    const args2 = [_]Argument{
+        .{ .arg_type = .l, .value = "$str" },
+    };
+    try func2.current_block.addInstruction(.{
         .lhs = "r",
         .assign_type = .w,
         .rhs = .{ .call = .{ .function_name = "puts", .args = &args2 } },
     });
-    try block2.addInstruction(.{
+    try func2.current_block.addInstruction(.{
         .lhs = null,
         .assign_type = null,
         .rhs = .{ .ret = .{ .value = "0" } },
     });
-    try func2.addBlock(&block2);
 
     // Add functions to section
     try section.add(&func1);

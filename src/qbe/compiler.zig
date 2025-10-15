@@ -2,16 +2,16 @@ const std = @import("std");
 const data = @import("data.zig");
 pub const Data = data;
 const function = @import("function.zig");
+pub const Function = function;
 const Writer = std.Io.Writer;
 const FunctionSection = function.FunctionSection;
-const Function = function.Function;
 
 /// QBECompiler updates and emits a stored state for a QBE program
 pub const QBECompiler = struct {
     arena: std.heap.ArenaAllocator,
     data: data.Data,
     functions: FunctionSection,
-    current_function: *Function,
+    current_function: *function.Function,
 
     /// Returns an initialized QBECompiler
     pub fn init(alloc: std.mem.Allocator) !QBECompiler {
@@ -21,16 +21,12 @@ pub const QBECompiler = struct {
         var functions = FunctionSection.init(arena_allocator);
 
         // Add main function
-        var main = try Function.init(arena_allocator, "main", .w, .@"export");
+        var main = try function.Function.init(arena_allocator, "main", .w, .@"export");
         try functions.add(&main);
-
-        var start_block = try function.Block.init(arena_allocator, "start");
-        // TODO: consider updating this functions signature to take a reference
-        try main.addBlock(&start_block);
 
         return .{
             .arena = arena,
-            .data = data.Data.init(),
+            .data = data.Data.init(arena_allocator),
             .functions = functions,
             .current_function = &main,
         };

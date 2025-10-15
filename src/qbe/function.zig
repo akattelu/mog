@@ -57,20 +57,28 @@ pub const Instruction = struct {
     }
 };
 
+/// QBE call instruction argument
+pub const Argument = struct {
+    /// Argument type
+    arg_type: Type,
+    /// Argument value (temporary variable with % prefix, or literal)
+    value: []const u8,
+};
+
 /// QBE call instruction
 pub const Call = struct {
     /// Function name to call (without $ sigil)
     function_name: []const u8,
     /// Arguments passed to the function
-    args: []const []const u8,
+    args: []const Argument,
 
     /// Emit call instruction to writer
-    /// Format: call $function_name(arg1, arg2, ...)
+    /// Format: call $function_name(type arg1, type arg2, ...)
     pub fn emit(self: *const Call, writer: *std.Io.Writer) !void {
         try writer.print("call ${s}(", .{self.function_name});
         for (self.args, 0..) |arg, i| {
             if (i > 0) try writer.print(", ", .{});
-            try writer.print("{s}", .{arg});
+            try writer.print("{s} {s}", .{ @tagName(arg.arg_type), arg.value });
         }
         try writer.print(")", .{});
     }
@@ -105,6 +113,9 @@ pub const Block = struct {
 
     /// Initialize a new block with the given label
     pub fn init(allocator: std.mem.Allocator, label: []const u8) !Block {
+        // TODO(human): The label string needs to be duplicated to the heap so it survives
+        // beyond this function call. Use: const label_copy = try allocator.dupe(u8, label);
+        // Then store label_copy instead of label.
         return .{
             .label = label,
             .instructions = try std.ArrayList(Instruction).initCapacity(allocator, 5),
@@ -148,6 +159,8 @@ pub const Function = struct {
     blocks: std.StringArrayHashMap(*Block),
     /// Allocator for memory management
     allocator: std.mem.Allocator,
+    /// Pointer to current block
+    current_block: *Block,
 
     /// Initialize a new function with the given name and linkage
     pub fn init(
@@ -156,14 +169,27 @@ pub const Function = struct {
         return_type: ?Type,
         linkage: Linkage,
     ) !Function {
-        return .{
+        // TODO(human): Both the "start" string literal and the name parameter need to be
+        // duplicated to the heap. Add these lines after the start_block allocation:
+        //   const start_label = try allocator.dupe(u8, "start");
+        //   start_block.* = try Block.init(allocator, start_label);
+        //   const name_copy = try allocator.dupe(u8, name);
+        // Then use name_copy in the Function initialization below instead of name.
+
+        // every function starts with a @start block
+        const start_block = try allocator.create(Block);
+        start_block.* = try Block.init(allocator, "start");
+        var func: Function = .{
             .name = name,
             .return_type = return_type,
             .linkage = linkage,
             .params = try std.ArrayList(*Parameter).initCapacity(allocator, 4),
             .blocks = std.StringArrayHashMap(*Block).init(allocator),
             .allocator = allocator,
+            .current_block = start_block,
         };
+        try func.addBlock(start_block);
+        return func;
     }
 
     /// Deinitialize the function and free all resources
@@ -171,7 +197,9 @@ pub const Function = struct {
         self.params.deinit(self.allocator);
         var block_iter = self.blocks.iterator();
         while (block_iter.next()) |entry| {
-            entry.value_ptr.*.deinit();
+            const block = entry.value_ptr.*;
+            block.deinit();
+            self.allocator.destroy(block);
         }
         self.blocks.deinit();
     }

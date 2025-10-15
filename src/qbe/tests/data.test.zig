@@ -9,18 +9,18 @@ test "writing string data definition" {
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
 
-    const test_cases = [_]struct { input: struct { idx: u32, string: []const u8 }, expected: []const u8 }{
-        .{ .input = .{ .idx = 0, .string = "hello world" }, .expected = 
+    const test_cases = [_]struct { input: struct { name: []const u8, string: []const u8 }, expected: []const u8 }{
+        .{ .input = .{ .name = "str_0", .string = "hello world" }, .expected = 
         \\data $str_0 = { b "hello world", b 0 }
         },
-        .{ .input = .{ .idx = 1, .string = "hello world again" }, .expected = 
+        .{ .input = .{ .name = "str_1", .string = "hello world again" }, .expected = 
         \\data $str_1 = { b "hello world again", b 0 }
         },
     };
 
     inline for (test_cases) |case| {
         // Check writer contents
-        const def = DataDefinition.fromString(case.input.idx, case.input.string);
+        const def = DataDefinition.fromString(case.input.name, case.input.string);
         try def.write(&writer.writer);
         try std.testing.expectEqualStrings(case.expected, writer.written());
 
@@ -34,16 +34,12 @@ test "writing full data section" {
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
 
-    // Make sample data
-    var d_1: DataDefinition = .fromString(0, "hello");
-    var d_2: DataDefinition = .fromString(1, "world");
-    var d_3: DataDefinition = .fromString(2, "again");
-
     // Make data list
-    var section: Data = .init();
-    section.add(&d_1);
-    section.add(&d_2);
-    section.add(&d_3);
+    var section: Data = .init(alloc);
+    defer section.deinit();
+    _ = try section.addString("hello");
+    _ = try section.addString("world");
+    _ = try section.addString("again");
 
     // Write data
     const expected =

@@ -12,12 +12,13 @@ const DataDefinitionValue = union(DataDefinitionType) {
 /// A data definition containing an index and a union value
 pub const DataDefinition = struct {
     value: DataDefinitionValue,
-    idx: u32,
+    name: []const u8,
     node: List.Node,
 
     /// Initializes a new string data definition
-    pub fn fromString(idx: u32, s: []const u8) DataDefinition {
-        return .{ .value = .{ .string = s }, .idx = idx, .node = .{} };
+    /// name and value must outlive the returned struct
+    pub fn fromString(name: []const u8, value: []const u8) DataDefinition {
+        return .{ .value = .{ .string = value }, .name = name, .node = .{} };
     }
 
     /// Write the definition to the writer (excludes newline)
@@ -25,8 +26,8 @@ pub const DataDefinition = struct {
         switch (self.value) {
             .string => |val| {
                 try writer.print(
-                    \\data $str_{d} = {{ b "{s}", b 0 }}
-                , .{ self.idx, val });
+                    \\data ${s} = {{ b "{s}", b 0 }}
+                , .{ self.name, val });
             },
         }
         return;
@@ -36,18 +37,24 @@ pub const DataDefinition = struct {
 /// Struct corresponding to data section of QBE IR (array of data definitions)
 pub const Data = struct {
     items: List,
+    arena: std.heap.ArenaAllocator,
 
     /// Create new data list
-    pub fn init() Data {
-        return .{ .items = .{} };
+    pub fn init(alloc: std.mem.Allocator) Data {
+        const arena = std.heap.ArenaAllocator.init(alloc);
+        return .{ .items = .{}, .arena = arena };
+    }
+
+    pub fn deinit(self: *Data) void {
+        self.arena.deinit();
     }
 
     /// Add a new DataDefinition to the list
-    pub fn add(self: *Data, data: *DataDefinition) void {
+    fn add(self: *Data, data: *DataDefinition) void {
         self.items.append(&data.node);
     }
 
-    // Emit IR for the data section
+    /// Emit IR for the data section
     pub fn emit(self: *Data, writer: *std.Io.Writer) !void {
         var node = self.items.first;
         while (node) |def| {
@@ -57,5 +64,22 @@ pub const Data = struct {
             node = a.node.next;
         }
         try writer.writeByte('\n');
+    }
+
+    /// Add a string to the data section and return its name
+    pub fn addString(self: *Data, s: []const u8) ![]const u8 {
+        // Copy string just in case, to make sure it outlives scope
+        var alloc = self.arena.allocator();
+        const copiedString = try alloc.dupe(u8, s);
+
+        // Get idx from linked list length
+        const idx: u32 = @intCast(self.items.len());
+        const name: []const u8 = try std.fmt.allocPrint(alloc, "str_{d}", .{idx});
+
+        // Allocate, create, add DataDefinition
+        const dd = try alloc.create(DataDefinition);
+        dd.* = DataDefinition.fromString(name, copiedString);
+        self.add(dd);
+        return name;
     }
 };
