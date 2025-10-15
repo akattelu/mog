@@ -1410,8 +1410,8 @@ pub const FunctionBody = struct {
             try self.params.?.write(writer);
         }
         try writer.writeAll(")");
+        // print another space if non-empty block
         if (self.block.statements.len > 0) {
-            // FIXME
             try writer.writeAll(" ");
         }
         try self.block.write(writer);

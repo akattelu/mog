@@ -12,6 +12,15 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 # Build the project
 zig build
 
+# Build with detailed output (recommended - shows compilation progress)
+zig build --summary all
+
+# Run all tests
+zig build test
+
+# Run tests with detailed output (recommended - shows which tests pass/fail)
+zig build test --summary all
+
 # Run the REPL in lexer mode
 zig build run -- repl --lex
 
@@ -27,9 +36,6 @@ zig build run -- fmt <file>
 # Show help message
 zig build run -- help
 
-# Run all tests
-zig build test
-
 # Format all Zig source files
 zig fmt .
 
@@ -40,6 +46,8 @@ zig build install-git-hooks
 zig build -Drelease=true
 ```
 
+**Note**: By default, `zig build` and `zig build test` produce minimal output and only show exit codes on success. Use `--summary all` to see detailed compilation progress, test results, and timing information. This is especially helpful when debugging build issues or verifying that tests are actually running.
+
 ## Architecture
 
 ### Core Components
@@ -47,13 +55,15 @@ zig build -Drelease=true
 1. **Lexer** (`src/lexer.zig`): Tokenizes input source code
    - Uses arena allocator for token memory management
    - Tracks token positions (start_pos, end_pos) for error reporting
-   - Supports strings, identifiers, integers, floats, keywords, and operators
+   - Supports strings, identifiers, integers, floats, keywords, operators, and C builtins
    - Handles multi-character operators (==, ~=, //, .., ..., <<, >>, etc.)
+   - Recognizes C builtin tokens starting with `$` prefix (e.g., `$puts`, `$malloc`)
 
 2. **Token** (`src/token.zig`): Token types and definitions
-   - Comprehensive TokenType enum covering all Lua operators and keywords
+   - Comprehensive TokenType enum covering all Lua operators, keywords, and C builtins
    - Keyword map for reserved words: `function`, `local`, `if`, `else`, `elseif`, `return`, `not`, `and`, `or`, `nil`, `while`, `repeat`, `for`, `break`, `do`, `end`, `then`, `until`, `in`, `goto`, `type`
    - Static string maps for efficient O(1) keyword lookup
+   - Includes `builtin` token type for C function calls
 
 3. **Parser** (`src/parser.zig`): Pratt parser implementing Lua 5.4 grammar
    - Implements precedence-based parsing for infix/prefix operators
@@ -65,9 +75,10 @@ zig build -Drelease=true
 
 4. **AST** (`src/ast.zig`): Abstract Syntax Tree node definitions
    - **Statement types**: Assignment, Return, Expression, FunctionDeclaration, Do, While, Repeat, ForNumeric, ForGeneric, Break
-   - **Expression types**: Identifier, Number (int/float), String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member, FunctionCall, MethodCall
+   - **Expression types**: Identifier, Number (int/float), String, Prefix, Infix, Conditional, Boolean, Nil, Varargs, FunctionDef, TableConstructor, Index, Member, FunctionCall, MethodCall, CBuiltin
    - All nodes implement `tokenLiteral()`, `write(Writer)`, and `pretty(PrettyPrinter)` methods
    - Uses tagged unions for type-safe polymorphic node types
+   - **CBuiltinExpression**: Represents C builtin function calls with `$` prefix for FFI (Foreign Function Interface) capabilities
 
 5. **Pretty Printer** (`src/pretty_printer.zig`): Formats AST back to readable Lua code
    - Manages indentation levels for nested structures
@@ -110,6 +121,82 @@ zig build -Drelease=true
 - **Tables**: table constructors with array-style, record-style, and computed-key fields
 - **Calls**: function calls, method calls with : syntax
 - **Access**: member access (.), index access ([])
+
+### C Builtin Functions (FFI)
+
+**CBuiltin** is a language extension in mog that enables Foreign Function Interface (FFI) capabilities by allowing direct calls to C functions from mog code. This feature bridges the gap between mog's Lua-like syntax and native C libraries.
+
+#### Syntax
+
+C builtin functions are prefixed with a dollar sign (`$`) followed by the C function name:
+
+```lua
+$puts("Hello from C!")
+local ptr = $malloc(256)
+$printf("Value: %d\n", 42)
+$free(ptr)
+```
+
+#### Implementation Details
+
+1. **Lexer** (`src/lexer.zig:100-115`):
+   - The `readBuiltin()` function recognizes tokens starting with `$`
+   - Validates that `$` is followed by a valid identifier (letter, then letters/digits/underscores)
+   - Returns the complete builtin name including the `$` prefix
+   - Invalid syntax (e.g., `$123`) produces a `LexError.Illegal` error
+
+2. **Token** (`src/token.zig:9`):
+   - Defines `builtin` as a distinct `TokenType` alongside identifiers and keywords
+   - Builtin tokens are not in the keyword map as they're identified by lexical pattern
+
+3. **Parser** (`src/parser.zig:119`):
+   - Maps the `"builtin"` token type to the `parseCBuiltinExpression` prefix parser
+   - Creates a `CBuiltinExpression` AST node containing the token and full name
+
+4. **AST** (`src/ast.zig:675-697`):
+   - `CBuiltinExpression` struct stores:
+     - `token`: The original token with position information
+     - `name`: The full builtin name including `$` prefix (e.g., `"$puts"`)
+   - Implements standard AST methods: `tokenLiteral()`, `write()`, `pretty()`
+   - Added to the `ExpressionTypes` enum and `Expression` tagged union
+
+5. **Compilation** (`src/ast.zig:887-890`):
+   - Function calls check if the callee is a `CBuiltin` expression
+   - QBE backend handles dynamic linking to C libraries at compile time
+   - Currently marked with FIXME for instruction generation
+
+#### Usage Examples
+
+```lua
+-- Simple C function call
+$puts("Hello, World!")
+
+-- Assignment from C function
+local memory = $malloc(1024)
+local name = $getenv("USER")
+
+-- C functions with multiple arguments
+$printf("Name: %s, Age: %d\n", name, age)
+$memcpy(dest, src, size)
+
+-- Using in expressions
+if $strcmp(str1, str2) == 0 then
+    print("Strings are equal")
+end
+
+-- Freeing resources
+$free(memory)
+```
+
+#### Testing
+
+CBuiltin functionality is tested in:
+- `src/tests/lexer.test.zig`: Tokenization of `$` prefix, position tracking, invalid cases
+- `src/tests/parser.test.zig`: Parsing builtin expressions standalone, in function calls, in assignments, multiple builtins
+
+#### QBE Integration
+
+The mog compiler uses QBE (Quick Backend) to generate native code with dynamic linking to C libraries. C builtins are compiled as external function calls that QBE resolves at link time, allowing seamless integration with the C standard library and other C-compatible libraries.
 
 ### Testing
 
