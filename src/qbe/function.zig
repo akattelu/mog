@@ -109,28 +109,28 @@ pub const Block = struct {
     /// Instructions in this block, ending with a terminating instruction
     instructions: std.ArrayList(Instruction),
     /// Allocator for memory management
-    allocator: std.mem.Allocator,
+    arena: std.heap.ArenaAllocator,
 
     /// Initialize a new block with the given label
     pub fn init(allocator: std.mem.Allocator, label: []const u8) !Block {
-        // TODO(human): The label string needs to be duplicated to the heap so it survives
-        // beyond this function call. Use: const label_copy = try allocator.dupe(u8, label);
-        // Then store label_copy instead of label.
+        var arena = std.heap.ArenaAllocator.init(allocator);
+        const alloc = arena.allocator();
+        const copied_label = try alloc.dupe(u8, label);
         return .{
-            .label = label,
-            .instructions = try std.ArrayList(Instruction).initCapacity(allocator, 5),
-            .allocator = allocator,
+            .label = copied_label,
+            .instructions = try std.ArrayList(Instruction).initCapacity(alloc, 5),
+            .arena = arena,
         };
     }
 
     /// Deinitialize the block and free instruction list
     pub fn deinit(self: *Block) void {
-        self.instructions.deinit(self.allocator);
+        self.arena.deinit();
     }
 
     /// Add an instruction to this block
     pub fn addInstruction(self: *Block, instruction: Instruction) !void {
-        try self.instructions.append(self.allocator, instruction);
+        try self.instructions.append(self.arena.allocator(), instruction);
     }
 
     /// Emit block to writer

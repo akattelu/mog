@@ -45,6 +45,7 @@ pub const Data = struct {
         return .{ .items = .{}, .arena = arena };
     }
 
+    /// Deinit the strings and DataDefinitions allocated by this struct
     pub fn deinit(self: *Data) void {
         self.arena.deinit();
     }
