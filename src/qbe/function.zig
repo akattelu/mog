@@ -143,9 +143,9 @@ pub const Function = struct {
     /// Linkage specification
     linkage: Linkage,
     /// Function parameters
-    params: std.ArrayList(Parameter),
+    params: std.ArrayList(*Parameter),
     /// Map of block labels to blocks (maintains insertion order for emission)
-    blocks: std.StringArrayHashMap(Block),
+    blocks: std.StringArrayHashMap(*Block),
     /// Allocator for memory management
     allocator: std.mem.Allocator,
 
@@ -160,8 +160,8 @@ pub const Function = struct {
             .name = name,
             .return_type = return_type,
             .linkage = linkage,
-            .params = try std.ArrayList(Parameter).initCapacity(allocator, 4),
-            .blocks = std.StringArrayHashMap(Block).init(allocator),
+            .params = try std.ArrayList(*Parameter).initCapacity(allocator, 4),
+            .blocks = std.StringArrayHashMap(*Block).init(allocator),
             .allocator = allocator,
         };
     }
@@ -171,19 +171,19 @@ pub const Function = struct {
         self.params.deinit(self.allocator);
         var block_iter = self.blocks.iterator();
         while (block_iter.next()) |entry| {
-            entry.value_ptr.deinit();
+            entry.value_ptr.*.deinit();
         }
         self.blocks.deinit();
     }
 
     /// Add a parameter to the function signature
-    pub fn addParameter(self: *Function, param: Parameter) !void {
+    pub fn addParameter(self: *Function, param: *Parameter) !void {
         try self.params.append(self.allocator, param);
     }
 
     /// Add a block to the function body
     /// The block is moved into the function's ownership
-    pub fn addBlock(self: *Function, block: Block) !void {
+    pub fn addBlock(self: *Function, block: *Block) !void {
         try self.blocks.put(block.label, block);
     }
 
@@ -225,7 +225,7 @@ pub const Function = struct {
         // Emit blocks in order
         var block_iter = self.blocks.iterator();
         while (block_iter.next()) |entry| {
-            try entry.value_ptr.emit(writer);
+            try entry.value_ptr.*.emit(writer);
         }
 
         try writer.print("}}\n", .{});

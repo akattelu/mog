@@ -24,9 +24,9 @@ pub const QBECompiler = struct {
         var main = try Function.init(arena_allocator, "main", .w, .@"export");
         try functions.add(&main);
 
-        const start_block = try function.Block.init(arena_allocator, "start");
+        var start_block = try function.Block.init(arena_allocator, "start");
         // TODO: consider updating this functions signature to take a reference
-        try main.addBlock(start_block);
+        try main.addBlock(&start_block);
 
         return .{
             .arena = arena,

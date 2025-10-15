@@ -21,8 +21,10 @@ test "emit simple function with return" {
     defer func.deinit();
 
     // Add parameters
-    try func.addParameter(.{ .name = "a", .param_type = .w });
-    try func.addParameter(.{ .name = "b", .param_type = .w });
+    var param_a: Parameter = .{ .name = "a", .param_type = .w };
+    var param_b: Parameter = .{ .name = "b", .param_type = .w };
+    try func.addParameter(&param_a);
+    try func.addParameter(&param_b);
 
     // Create start block
     var start_block = try Block.init(alloc, "start");
@@ -42,7 +44,7 @@ test "emit simple function with return" {
         .rhs = .{ .ret = .{ .value = "%result" } },
     });
 
-    try func.addBlock(start_block);
+    try func.addBlock(&start_block);
 
     // Emit and verify
     const expected = "function w $add(w %a, w %b) {\n" ++
@@ -83,7 +85,7 @@ test "emit exported function with multiple blocks" {
         .rhs = .{ .ret = .{ .value = "0" } },
     });
 
-    try func.addBlock(start_block);
+    try func.addBlock(&start_block);
 
     // Emit and verify
     const expected = "export function w $main() {\n" ++
@@ -124,7 +126,7 @@ test "emit void function with no parameters" {
         .rhs = .{ .ret = .{ .value = null } },
     });
 
-    try func.addBlock(block);
+    try func.addBlock(&block);
 
     // Emit and verify
     const expected = "function $cleanup() {\n" ++
@@ -149,8 +151,10 @@ test "emit function section with multiple functions" {
 
     // Create first function: function w $add(w %a, w %b)
     var func1 = try Function.init(alloc, "add", .w, .none);
-    try func1.addParameter(.{ .name = "a", .param_type = .w });
-    try func1.addParameter(.{ .name = "b", .param_type = .w });
+    var param_a: Parameter = .{ .name = "a", .param_type = .w };
+    var param_b: Parameter = .{ .name = "b", .param_type = .w };
+    try func1.addParameter(&param_a);
+    try func1.addParameter(&param_b);
 
     var block1 = try Block.init(alloc, "start");
     const args1 = [_][]const u8{ "w %a", "w %b" };
@@ -164,7 +168,7 @@ test "emit function section with multiple functions" {
         .assign_type = null,
         .rhs = .{ .ret = .{ .value = "%result" } },
     });
-    try func1.addBlock(block1);
+    try func1.addBlock(&block1);
 
     // Create second function: export function w $main()
     var func2 = try Function.init(alloc, "main", .w, .@"export");
@@ -181,7 +185,7 @@ test "emit function section with multiple functions" {
         .assign_type = null,
         .rhs = .{ .ret = .{ .value = "0" } },
     });
-    try func2.addBlock(block2);
+    try func2.addBlock(&block2);
 
     // Add functions to section
     try section.add(&func1);
