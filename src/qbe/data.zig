@@ -1,5 +1,6 @@
 const std = @import("std");
 const List = std.DoublyLinkedList;
+const Allocator = std.mem.Allocator;
 
 /// All the different types of definitions in the data section of the SSA
 const DataDefinitionType = enum { string };
@@ -14,11 +15,25 @@ pub const DataDefinition = struct {
     value: DataDefinitionValue,
     name: []const u8,
     node: List.Node,
+    alloc: Allocator,
 
-    /// Initializes a new string data definition
-    /// name and value must outlive the returned struct
-    pub fn fromString(name: []const u8, value: []const u8) DataDefinition {
-        return .{ .value = .{ .string = value }, .name = name, .node = .{} };
+    /// Initialize owned data with string namek:w
+    ///  and value
+    pub fn initString(allocator: Allocator, name: []const u8, value: []const u8) !DataDefinition {
+        const copied_name = try allocator.dupe(u8, name);
+        const copied_value = try allocator.dupe(u8, value);
+
+        return .{ .name = copied_name, .value = .{ .string = copied_value }, .alloc = allocator, .node = .{} };
+    }
+
+    /// Free copied name and value
+    pub fn deinit(self: *const DataDefinition) void {
+        self.alloc.free(self.name);
+        switch (self.value) {
+            .string => {
+                self.alloc.free(self.value.string);
+            },
+        }
     }
 
     /// Write the definition to the writer (excludes newline)
@@ -41,10 +56,7 @@ pub const Data = struct {
 
     /// Create new data list
     pub fn init(alloc: std.mem.Allocator) Data {
-        // FIXME: use of smp allocator raw
-        _ = alloc;
-
-        return .{ .items = .{}, .alloc = std.heap.smp_allocator };
+        return .{ .items = .{}, .alloc = alloc };
     }
 
     /// Deinit the strings and DataDefinitions allocated by this struct
@@ -55,8 +67,7 @@ pub const Data = struct {
             const a: *DataDefinition = @fieldParentPtr("node", def);
             node = a.node.next;
 
-            self.alloc.free(a.name);
-            self.alloc.free(a.value.string);
+            a.deinit();
             self.alloc.destroy(a);
         }
     }
@@ -80,18 +91,16 @@ pub const Data = struct {
 
     /// Add a string to the data section and return its name
     pub fn addString(self: *Data, s: []const u8) ![]const u8 {
-        // FIXME: every alloc relating to self.alloc fails when running main
-        // Copy string just in case, to make sure it outlives scope
-        const s_copy = try std.fmt.allocPrint(self.alloc, "{s}", .{s});
-
         // Get idx from linked list length
         const idx: u32 = @intCast(self.items.len());
-        const name: []const u8 = try std.fmt.allocPrint(self.alloc, "str_{d}", .{idx});
+
+        const name = try std.fmt.allocPrint(self.alloc, "str_{d}", .{idx});
+        defer self.alloc.free(name);
 
         // Allocate, create, add DataDefinition
         const dd = try self.alloc.create(DataDefinition);
-        dd.* = DataDefinition.fromString(name, s_copy);
+        dd.* = try DataDefinition.initString(self.alloc, name, s);
         self.add(dd);
-        return name;
+        return dd.name;
     }
 };

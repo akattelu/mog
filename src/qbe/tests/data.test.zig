@@ -20,7 +20,8 @@ test "writing string data definition" {
 
     inline for (test_cases) |case| {
         // Check writer contents
-        const def = DataDefinition.fromString(case.input.name, case.input.string);
+        const def = try DataDefinition.initString(alloc, case.input.name, case.input.string);
+        defer def.deinit();
         try def.write(&writer.writer);
         try std.testing.expectEqualStrings(case.expected, writer.written());
 
@@ -36,9 +37,7 @@ test "writing full data section" {
 
     // Make data list
     var section: Data = .init(alloc);
-    defer section.deinit();
-    const hello = "hello";
-    _ = try section.addString(hello);
+    _ = try section.addString("hello");
     _ = try section.addString("world");
     _ = try section.addString("again");
 
@@ -52,5 +51,6 @@ test "writing full data section" {
     ;
 
     try section.emit(&writer.writer);
+    section.deinit();
     try std.testing.expectEqualStrings(expected, writer.written());
 }
