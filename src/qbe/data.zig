@@ -11,30 +11,10 @@ const DataDefinitionValue = union(DataDefinitionType) {
 };
 
 /// A data definition containing an index and a union value
-pub const DataDefinition = struct {
+const DataDefinition = struct {
     value: DataDefinitionValue,
     name: []const u8,
     node: List.Node,
-    alloc: Allocator,
-
-    /// Initialize owned data with string namek:w
-    ///  and value
-    pub fn initString(allocator: Allocator, name: []const u8, value: []const u8) !DataDefinition {
-        const copied_name = try allocator.dupe(u8, name);
-        const copied_value = try allocator.dupe(u8, value);
-
-        return .{ .name = copied_name, .value = .{ .string = copied_value }, .alloc = allocator, .node = .{} };
-    }
-
-    /// Free copied name and value
-    pub fn deinit(self: *const DataDefinition) void {
-        self.alloc.free(self.name);
-        switch (self.value) {
-            .string => {
-                self.alloc.free(self.value.string);
-            },
-        }
-    }
 
     /// Write the definition to the writer (excludes newline)
     pub fn write(self: *const DataDefinition, writer: *std.Io.Writer) !void {
@@ -67,7 +47,12 @@ pub const Data = struct {
             const a: *DataDefinition = @fieldParentPtr("node", def);
             node = a.node.next;
 
-            a.deinit();
+            self.alloc.free(a.name);
+            switch (a.value) {
+                .string => |s| {
+                    self.alloc.free(s);
+                },
+            }
             self.alloc.destroy(a);
         }
     }
@@ -95,11 +80,11 @@ pub const Data = struct {
         const idx: u32 = @intCast(self.items.len());
 
         const name = try std.fmt.allocPrint(self.alloc, "str_{d}", .{idx});
-        defer self.alloc.free(name);
+        const owned_value = try self.alloc.dupe(u8, s);
 
         // Allocate, create, add DataDefinition
         const dd = try self.alloc.create(DataDefinition);
-        dd.* = try DataDefinition.initString(self.alloc, name, s);
+        dd.* = .{ .name = name, .value = .{ .string = owned_value }, .node = .{} };
         self.add(dd);
         return dd.name;
     }
