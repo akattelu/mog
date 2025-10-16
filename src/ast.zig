@@ -81,8 +81,6 @@ pub const Statement = union(StatementTypes) {
 
     /// Emit IR with Compiler
     pub fn compile(self: *const Statement, c: *Compiler) !void {
-        std.log.info("compile statement: {any}", .{self});
-
         switch (self.*) {
             .Expression => |n| try n.expr.compile(c),
             else => unreachable,
@@ -884,21 +882,18 @@ pub const FunctionCallExpression = struct {
 
     /// Emit IR with Compiler
     pub fn compile(self: *const FunctionCallExpression, c: *Compiler) !void {
-        std.log.info("fcall: {any}", .{self});
         switch (self.function.*) {
             .CBuiltin => |cbuiltin| {
                 switch (self.args) {
                     .StringLiteral => |s| {
                         // Add string literal to data section
+                        std.log.info("adding string to compiler state {s}", .{s.value});
+                        std.log.info("compiler ptr: {*}, data ptr: {*}", .{ c, c.data });
                         const string_data_ref = try c.data.addString(s.value);
 
-                        // Create args
-                        const args = &[_]qbe.Function.Argument{.{ .arg_type = .l, .value = string_data_ref }};
-
                         // Add instruction
-                        const instr: qbe.Function.Instruction = .{ .assign_type = null, .lhs = null, .rhs = .{ .call = .{ .function_name = cbuiltin.name, .args = args } } };
-                        std.log.info("instr {any} ref {s} ", .{ instr, string_data_ref });
-                        try c.current_function.current_block.addInstruction(instr);
+                        const call = try c.current_function.current_block.addNewCall(cbuiltin.name);
+                        try call.add_arg(.l, string_data_ref);
                     },
 
                     else => unreachable,
@@ -1564,7 +1559,6 @@ pub const Program = struct {
 
     /// Emit IR with Compiler
     pub fn compile(self: *const Program, c: *Compiler) !void {
-        std.log.info("compile program: {any}", .{self});
         for (self.statements) |stmt| {
             try stmt.compile(c);
         }

@@ -9,8 +9,8 @@ const FunctionSection = function.FunctionSection;
 /// QBECompiler updates and emits a stored state for a QBE program
 pub const QBECompiler = struct {
     arena: std.heap.ArenaAllocator,
-    data: data.Data,
-    functions: FunctionSection,
+    data: *data.Data,
+    functions: *FunctionSection,
     current_function: *function.Function,
 
     /// Returns an initialized QBECompiler
@@ -18,18 +18,30 @@ pub const QBECompiler = struct {
         var arena = std.heap.ArenaAllocator.init(alloc);
         const arena_allocator = arena.allocator();
 
-        var functions = FunctionSection.init(arena_allocator);
+        // Create data section
+        const data_section: *data.Data = try arena_allocator.create(data.Data);
+        data_section.* = data.Data.init(arena_allocator);
+        // data_section.* = .{ .items = .{}, .alloc = arena_allocator };
+
+        // Create function section
+        var functions = try arena_allocator.create(FunctionSection);
+        functions.* = FunctionSection.init(arena_allocator);
 
         // Add main function
-        var main = try function.Function.init(arena_allocator, "main", .w, .@"export");
-        try functions.add(&main);
+        const main = try arena_allocator.create(function.Function);
+        main.* = try function.Function.init(arena_allocator, "main", .w, .@"export");
+        try functions.add(main);
 
         return .{
             .arena = arena,
-            .data = data.Data.init(arena_allocator),
+            .data = data_section,
             .functions = functions,
-            .current_function = &main,
+            .current_function = main,
         };
+    }
+
+    pub fn deinit(self: *QBECompiler) void {
+        self.arena.deinit();
     }
 
     /// Emit QBE IR to the writer
@@ -42,6 +54,7 @@ pub const QBECompiler = struct {
 
     /// Emit QBE IR to a file specified by subpath
     pub fn emitFile(self: *QBECompiler, subpath: []const u8) !void {
+        std.log.info("emitting file {s} with compiler state: {any}", .{ subpath, self });
         const file_handle = try std.fs.cwd().createFile(subpath, .{});
         defer file_handle.close();
 

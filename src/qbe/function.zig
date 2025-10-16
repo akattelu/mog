@@ -33,7 +33,7 @@ pub const Instruction = struct {
     assign_type: ?Type,
     /// The instruction operation and its operands
     rhs: union(InstructionType) {
-        call: Call,
+        call: *Call,
         ret: Ret,
     },
 
@@ -70,13 +70,40 @@ pub const Call = struct {
     /// Function name to call (without $ sigil)
     function_name: []const u8,
     /// Arguments passed to the function
-    args: []const Argument,
+    args: std.ArrayList(*Argument),
+    /// Allocator
+    alloc: std.mem.Allocator,
+
+    pub fn init(alloc: std.mem.Allocator, name: []const u8) !Call {
+        const name_copy = try alloc.dupe(u8, name);
+        return .{
+            .alloc = alloc,
+            .args = try std.ArrayList(*Argument).initCapacity(alloc, 3),
+            .function_name = name_copy,
+        };
+    }
+
+    pub fn add_arg(self: *Call, arg_type: Type, arg: []const u8) !void {
+        const arg_ptr = try self.alloc.create(Argument);
+        // FIXME: make sure deinit() frees this name
+        const arg_name_copy = try self.alloc.dupe(u8, arg);
+        arg_ptr.* = .{
+            .arg_type = arg_type,
+            .value = arg_name_copy,
+        };
+        try self.args.append(self.alloc, arg_ptr);
+    }
+
+    pub fn deinit(self: *Call) void {
+        self.args.deinit(self.alloc);
+        self.alloc.free(self.function_name);
+    }
 
     /// Emit call instruction to writer
     /// Format: call $function_name(type arg1, type arg2, ...)
     pub fn emit(self: *const Call, writer: *std.Io.Writer) !void {
         try writer.print("call ${s}(", .{self.function_name});
-        for (self.args, 0..) |arg, i| {
+        for (self.args.items, 0..) |arg, i| {
             if (i > 0) try writer.print(", ", .{});
             try writer.print("{s} {s}", .{ @tagName(arg.arg_type), arg.value });
         }
@@ -107,37 +134,45 @@ pub const Block = struct {
     /// Block label (without @ sigil, e.g., "start", "loop_body")
     label: []const u8,
     /// Instructions in this block, ending with a terminating instruction
-    instructions: std.ArrayList(Instruction),
+    instructions: std.ArrayList(*Instruction),
     /// Allocator for memory management
-    arena: std.heap.ArenaAllocator,
+    alloc: std.mem.Allocator,
 
     /// Initialize a new block with the given label
     pub fn init(allocator: std.mem.Allocator, label: []const u8) !Block {
-        var arena = std.heap.ArenaAllocator.init(allocator);
-        const alloc = arena.allocator();
-        const copied_label = try alloc.dupe(u8, label);
+        const copied_label = try allocator.dupe(u8, label);
         return .{
             .label = copied_label,
-            .instructions = try std.ArrayList(Instruction).initCapacity(alloc, 5),
-            .arena = arena,
+            .instructions = try std.ArrayList(*Instruction).initCapacity(allocator, 5),
+            .alloc = allocator,
         };
     }
 
     /// Deinitialize the block and free instruction list
     pub fn deinit(self: *Block) void {
-        self.arena.deinit();
+        self.instructions.deinit(self.alloc);
+        self.alloc.free(self.label);
     }
 
     /// Add an instruction to this block
-    pub fn addInstruction(self: *Block, instruction: Instruction) !void {
-        try self.instructions.append(self.arena.allocator(), instruction);
+    pub fn addInstruction(self: *Block, instruction: *Instruction) !void {
+        try self.instructions.append(self.alloc, instruction);
+    }
+
+    pub fn addNewCall(self: *Block, name: []const u8) !*Call {
+        const instr: *Instruction = try self.alloc.create(Instruction);
+        const call: *Call = try self.alloc.create(Call);
+        call.* = try Call.init(self.alloc, name);
+        instr.* = .{ .lhs = null, .assign_type = null, .rhs = .{ .call = call } };
+        try self.addInstruction(instr);
+        return call;
     }
 
     /// Emit block to writer
     /// Format: @label followed by tab-indented instructions
     pub fn emit(self: *const Block, writer: *std.Io.Writer) !void {
         try writer.print("@{s}\n", .{self.label});
-        for (self.instructions.items) |*instruction| {
+        for (self.instructions.items) |instruction| {
             try writer.writeByte('\t');
             try instruction.emit(writer);
             try writer.writeByte('\n');

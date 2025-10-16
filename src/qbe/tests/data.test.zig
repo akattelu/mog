@@ -37,7 +37,8 @@ test "writing full data section" {
     // Make data list
     var section: Data = .init(alloc);
     defer section.deinit();
-    _ = try section.addString("hello");
+    const hello = "hello";
+    _ = try section.addString(hello);
     _ = try section.addString("world");
     _ = try section.addString("again");
 

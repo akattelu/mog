@@ -37,17 +37,28 @@ pub const DataDefinition = struct {
 /// Struct corresponding to data section of QBE IR (array of data definitions)
 pub const Data = struct {
     items: List,
-    arena: std.heap.ArenaAllocator,
+    alloc: std.mem.Allocator,
 
     /// Create new data list
     pub fn init(alloc: std.mem.Allocator) Data {
-        const arena = std.heap.ArenaAllocator.init(alloc);
-        return .{ .items = .{}, .arena = arena };
+        // FIXME: use of smp allocator raw
+        _ = alloc;
+
+        return .{ .items = .{}, .alloc = std.heap.smp_allocator };
     }
 
     /// Deinit the strings and DataDefinitions allocated by this struct
     pub fn deinit(self: *Data) void {
-        self.arena.deinit();
+        var node = self.items.first;
+        while (node) |def| {
+            // Free name, then node
+            const a: *DataDefinition = @fieldParentPtr("node", def);
+            node = a.node.next;
+
+            self.alloc.free(a.name);
+            self.alloc.free(a.value.string);
+            self.alloc.destroy(a);
+        }
     }
 
     /// Add a new DataDefinition to the list
@@ -69,17 +80,17 @@ pub const Data = struct {
 
     /// Add a string to the data section and return its name
     pub fn addString(self: *Data, s: []const u8) ![]const u8 {
+        // FIXME: every alloc relating to self.alloc fails when running main
         // Copy string just in case, to make sure it outlives scope
-        var alloc = self.arena.allocator();
-        const copiedString = try alloc.dupe(u8, s);
+        const s_copy = try std.fmt.allocPrint(self.alloc, "{s}", .{s});
 
         // Get idx from linked list length
         const idx: u32 = @intCast(self.items.len());
-        const name: []const u8 = try std.fmt.allocPrint(alloc, "str_{d}", .{idx});
+        const name: []const u8 = try std.fmt.allocPrint(self.alloc, "str_{d}", .{idx});
 
         // Allocate, create, add DataDefinition
-        const dd = try alloc.create(DataDefinition);
-        dd.* = DataDefinition.fromString(name, copiedString);
+        const dd = try self.alloc.create(DataDefinition);
+        dd.* = DataDefinition.fromString(name, s_copy);
         self.add(dd);
         return name;
     }

@@ -246,7 +246,7 @@ pub fn build(args: *std.process.ArgIterator) CommandErrUnion!u8 {
     const program = try parser.parseProgram();
 
     // Create a compiler and compile
-    var compiler = try QBECompiler.init(std.heap.page_allocator);
+    var compiler = try QBECompiler.init(alloc);
     try program.compile(&compiler);
 
     // Output the final ssa file
