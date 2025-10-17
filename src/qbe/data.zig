@@ -5,7 +5,7 @@ const Allocator = std.mem.Allocator;
 /// All the different types of definitions in the data section of the SSA
 const DataDefinitionType = enum { string };
 
-/// Union containing different types of data definitions such as stringsA
+/// Union containing different types of data definitions such as strings
 const DataDefinitionValue = union(DataDefinitionType) {
     string: []const u8,
 };
@@ -25,7 +25,6 @@ const DataDefinition = struct {
                 , .{ self.name, val });
             },
         }
-        return;
     }
 };
 
@@ -80,10 +79,14 @@ pub const Data = struct {
         const idx: u32 = @intCast(self.items.len());
 
         const name = try std.fmt.allocPrint(self.alloc, "str_{d}", .{idx});
+        errdefer self.alloc.free(name);
+
         const owned_value = try self.alloc.dupe(u8, s);
+        errdefer self.alloc.free(owned_value);
 
         // Allocate, create, add DataDefinition
         const dd = try self.alloc.create(DataDefinition);
+        errdefer self.alloc.destroy(dd);
         dd.* = .{ .name = name, .value = .{ .string = owned_value }, .node = .{} };
         self.add(dd);
         return dd.name;
