@@ -887,12 +887,10 @@ pub const FunctionCallExpression = struct {
                 switch (self.args) {
                     .StringLiteral => |s| {
                         // Add string literal to data section
-                        std.log.info("adding string to compiler state {s}", .{s.value});
-                        std.log.info("compiler ptr: {*}, data ptr: {*}", .{ c, c.data });
                         const string_data_ref = try c.data.addString(s.value);
 
                         // Add instruction
-                        const call = try c.current_function.current_block.addNewCall(cbuiltin.name);
+                        const call = try c.current_function.current_block.?.addNewCall(cbuiltin.name);
                         try call.add_arg(.l, string_data_ref);
                     },
 

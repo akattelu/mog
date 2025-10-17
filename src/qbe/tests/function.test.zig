@@ -3,201 +3,140 @@ const function = @import("../function.zig");
 const Function = function.Function;
 const FunctionSection = function.FunctionSection;
 const Block = function.Block;
-const Instruction = function.Instruction;
-const Call = function.Call;
-const Ret = function.Ret;
+const instruction = @import("../instruction.zig");
+const Instruction = instruction.Instruction;
+const Call = instruction.Call;
+const Ret = instruction.Ret;
 const Parameter = function.Parameter;
-const Argument = function.Argument;
-const Type = function.Type;
+const Type = instruction.Type;
 const Linkage = function.Linkage;
 
-// test "emit simple function with return" {
-//     // Initialize writer
-//     const alloc = std.testing.allocator;
-//     var writer = std.Io.Writer.Allocating.init(alloc);
-//     defer writer.deinit();
+test "Block.addNewCall creates and adds call instruction" {
+    const alloc = std.testing.allocator;
 
-//     // Create function: function w $add(w %a, w %b) { @start ... }
-//     var func = try Function.init(alloc, "add", .w, .none);
-//     defer func.deinit();
+    // Create a block
+    var block = try Block.init(alloc, "test_block");
+    defer block.deinit();
 
-//     // Add parameters
-//     var param_a: Parameter = .{ .name = "a", .param_type = .w };
-//     var param_b: Parameter = .{ .name = "b", .param_type = .w };
-//     try func.addParameter(&param_a);
-//     try func.addParameter(&param_b);
+    // Add a new call instruction
+    const call = try block.addNewCall("printf");
 
-//     // Add instructions to the start block (automatically created by Function.init)
-//     const args = [_]Argument{
-//         .{ .arg_type = .w, .value = "%a" },
-//         .{ .arg_type = .w, .value = "%b" },
-//     };
-//     const result_call: Instruction = .{
-//         .lhs = "result",
-//         .assign_type = .w,
-//         .rhs = .{ .call = .{ .function_name = "internal_add", .args = &args } },
-//     };
-//     try func.current_block.addInstruction(&result_call);
+    // Verify the call was created
+    try std.testing.expectEqualStrings("printf", call.function_name);
+    try std.testing.expectEqual(@as(usize, 0), call.args.items.len);
 
-//     // Add return instruction: ret %result
-//     const empty_ret = .{
-//         .lhs = null,
-//         .assign_type = null,
-//         .rhs = .{ .ret = .{ .value = "%result" } },
-//     };
-//     try func.current_block.addInstruction(&empty_ret);
+    // Add arguments to the call
+    try call.add_arg(.w, "%x");
+    try call.add_arg(.l, "42");
 
-//     // Emit and verify
-//     const expected = "function w $add(w %a, w %b) {\n" ++
-//         "@start\n" ++
-//         "\t%result =w call $internal_add(w %a, w %b)\n" ++
-//         "\tret %result\n" ++
-//         "}\n";
+    // Verify arguments were added
+    try std.testing.expectEqual(@as(usize, 2), call.args.items.len);
+    try std.testing.expectEqualStrings("%x", call.args.items[0].value);
+    try std.testing.expectEqual(Type.w, call.args.items[0].arg_type);
+    try std.testing.expectEqualStrings("42", call.args.items[1].value);
+    try std.testing.expectEqual(Type.l, call.args.items[1].arg_type);
 
-//     try func.emit(&writer.writer);
-//     try std.testing.expectEqualStrings(expected, writer.written());
-// }
+    // Verify the instruction was added to the block
+    try std.testing.expectEqual(@as(usize, 1), block.instructions.items.len);
 
-// test "emit exported function with multiple blocks" {
-//     // Initialize writer
-//     const alloc = std.testing.allocator;
-//     var writer = std.Io.Writer.Allocating.init(alloc);
-//     defer writer.deinit();
+    // Verify the instruction's structure
+    const instr = block.instructions.items[0];
+    try std.testing.expectEqual(@as(?[]const u8, null), instr.lhs);
+    try std.testing.expectEqual(@as(?Type, null), instr.assign_type);
+}
 
-//     // Create exported function: export function w $main() { ... }
-//     var func = try Function.init(alloc, "main", .w, .@"export");
-//     defer func.deinit();
+test "FunctionSection allocation and deallocation" {
+    const alloc = std.testing.allocator;
 
-//     // Add instructions to the start block (automatically created by Function.init)
-//     const args = [_]Argument{
-//         .{ .arg_type = .l, .value = "$str" },
-//     };
-//     try func.current_block.addInstruction(.{
-//         .lhs = "r",
-//         .assign_type = .w,
-//         .rhs = .{ .call = .{ .function_name = "puts", .args = &args } },
-//     });
+    // Create function section
+    var section = FunctionSection.init(alloc);
+    defer section.deinit();
 
-//     // Add return instruction: ret 0
-//     try func.current_block.addInstruction(.{
-//         .lhs = null,
-//         .assign_type = null,
-//         .rhs = .{ .ret = .{ .value = "0" } },
-//     });
+    // Create first function with a block and instructions
+    const func1 = try alloc.create(Function);
+    func1.* = try Function.init(alloc, "main", .w, .@"export");
+    try section.add(func1);
 
-//     // Emit and verify
-//     const expected = "export function w $main() {\n" ++
-//         "@start\n" ++
-//         "\t%r =w call $puts(l $str)\n" ++
-//         "\tret 0\n" ++
-//         "}\n";
+    // Add a call to the start block
+    const call1 = try func1.current_block.?.addNewCall("puts");
+    try call1.add_arg(.l, "%msg");
 
-//     try func.emit(&writer.writer);
-//     try std.testing.expectEqualStrings(expected, writer.written());
-// }
+    // Add a return instruction
+    const ret_instr = try alloc.create(Instruction);
+    ret_instr.* = .{
+        .lhs = null,
+        .assign_type = null,
+        .rhs = .{ .ret = .{ .value = "0" } },
+    };
+    try func1.current_block.?.instructions.append(alloc, ret_instr);
 
-// test "emit void function with no parameters" {
-//     // Initialize writer
-//     const alloc = std.testing.allocator;
-//     var writer = std.Io.Writer.Allocating.init(alloc);
-//     defer writer.deinit();
+    // Create second function
+    const func2 = try alloc.create(Function);
+    func2.* = try Function.init(alloc, "helper", null, .none);
+    try section.add(func2);
 
-//     // Create void function: function $cleanup() { ... }
-//     var func = try Function.init(alloc, "cleanup", null, .none);
-//     defer func.deinit();
+    // Add a call to the helper function's start block
+    const call2 = try func2.current_block.?.addNewCall("exit");
+    try call2.add_arg(.w, "1");
 
-//     // Add instructions to the start block (automatically created by Function.init)
-//     const no_args = [_]Argument{};
-//     try func.current_block.addInstruction(.{
-//         .lhs = null,
-//         .assign_type = null,
-//         .rhs = .{ .call = .{ .function_name = "free", .args = &no_args } },
-//     });
+    // Verify functions were added
+    try std.testing.expectEqual(@as(usize, 2), section.functions.items.len);
+    try std.testing.expectEqualStrings("main", section.functions.items[0].name);
+    try std.testing.expectEqualStrings("helper", section.functions.items[1].name);
 
-//     // Add void return: ret
-//     try func.current_block.addInstruction(.{
-//         .lhs = null,
-//         .assign_type = null,
-//         .rhs = .{ .ret = .{ .value = null } },
-//     });
+    // deinit will be called automatically and should not leak
+}
 
-//     // Emit and verify
-//     const expected = "function $cleanup() {\n" ++
-//         "@start\n" ++
-//         "\tcall $free()\n" ++
-//         "\tret\n" ++
-//         "}\n";
+test "FunctionSection.emit outputs correct QBE IR" {
+    const alloc = std.testing.allocator;
 
-//     try func.emit(&writer.writer);
-//     try std.testing.expectEqualStrings(expected, writer.written());
-// }
+    // Initialize writer
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
 
-// test "emit function section with multiple functions" {
-//     // Initialize writer
-//     const alloc = std.testing.allocator;
-//     var writer = std.Io.Writer.Allocating.init(alloc);
-//     defer writer.deinit();
+    // Create function section
+    var section = FunctionSection.init(alloc);
+    defer section.deinit();
 
-//     // Create function section
-//     var section = FunctionSection.init(alloc);
-//     defer section.deinit();
+    // Create a simple function: export function w $add(w %a, w %b)
+    const func = try alloc.create(Function);
+    func.* = try Function.init(alloc, "add", .w, .@"export");
 
-//     // Create first function: function w $add(w %a, w %b)
-//     var func1 = try Function.init(alloc, "add", .w, .none);
-//     var param_a: Parameter = .{ .name = "a", .param_type = .w };
-//     var param_b: Parameter = .{ .name = "b", .param_type = .w };
-//     try func1.addParameter(&param_a);
-//     try func1.addParameter(&param_b);
+    // Add parameters
+    _ = try func.createParameter("a", .w);
+    _ = try func.createParameter("b", .w);
 
-//     const args1 = [_]Argument{
-//         .{ .arg_type = .w, .value = "%a" },
-//         .{ .arg_type = .w, .value = "%b" },
-//     };
-//     try func1.current_block.addInstruction(.{
-//         .lhs = "result",
-//         .assign_type = .w,
-//         .rhs = .{ .call = .{ .function_name = "internal_add", .args = &args1 } },
-//     });
-//     try func1.current_block.addInstruction(.{
-//         .lhs = null,
-//         .assign_type = null,
-//         .rhs = .{ .ret = .{ .value = "%result" } },
-//     });
+    // Add instructions to start block
+    // %sum =w add %a, %b (we'll use a call as placeholder since add isn't implemented yet)
+    const call = try func.current_block.?.addNewCall("__internal_add");
+    try call.add_arg(.w, "%a");
+    try call.add_arg(.w, "%b");
 
-//     // Create second function: export function w $main()
-//     var func2 = try Function.init(alloc, "main", .w, .@"export");
+    // Modify the instruction to have an assignment
+    func.current_block.?.instructions.items[0].lhs = "sum";
+    func.current_block.?.instructions.items[0].assign_type = .w;
 
-//     const args2 = [_]Argument{
-//         .{ .arg_type = .l, .value = "$str" },
-//     };
-//     try func2.current_block.addInstruction(.{
-//         .lhs = "r",
-//         .assign_type = .w,
-//         .rhs = .{ .call = .{ .function_name = "puts", .args = &args2 } },
-//     });
-//     try func2.current_block.addInstruction(.{
-//         .lhs = null,
-//         .assign_type = null,
-//         .rhs = .{ .ret = .{ .value = "0" } },
-//     });
+    // Add return instruction
+    const ret_instr = try alloc.create(Instruction);
+    ret_instr.* = .{
+        .lhs = null,
+        .assign_type = null,
+        .rhs = .{ .ret = .{ .value = "%sum" } },
+    };
+    try func.current_block.?.instructions.append(alloc, ret_instr);
 
-//     // Add functions to section
-//     try section.add(&func1);
-//     try section.add(&func2);
+    // Add function to section
+    try section.add(func);
 
-//     // Emit and verify
-//     const expected = "function w $add(w %a, w %b) {\n" ++
-//         "@start\n" ++
-//         "\t%result =w call $internal_add(w %a, w %b)\n" ++
-//         "\tret %result\n" ++
-//         "}\n" ++
-//         "\n" ++
-//         "export function w $main() {\n" ++
-//         "@start\n" ++
-//         "\t%r =w call $puts(l $str)\n" ++
-//         "\tret 0\n" ++
-//         "}\n";
+    // Expected output
+    const expected =
+        "export function w $add(w %a, w %b) {\n" ++
+        "@start\n" ++
+        "\t%sum =w call $__internal_add(w %a, w %b)\n" ++
+        "\tret %sum\n" ++
+        "}\n";
 
-//     try section.emit(&writer.writer);
-//     try std.testing.expectEqualStrings(expected, writer.written());
-// }
+    // Emit and verify
+    try section.emit(&writer.writer);
+    try std.testing.expectEqualStrings(expected, writer.written());
+}

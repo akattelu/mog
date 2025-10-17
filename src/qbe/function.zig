@@ -3,6 +3,7 @@ const instruction = @import("instruction.zig");
 const Instruction = instruction.Instruction;
 const Call = instruction.Call;
 const Type = instruction.Type;
+const Allocator = std.mem.Allocator;
 
 /// QBE function linkage types
 pub const Linkage = enum {
@@ -21,10 +22,10 @@ pub const Block = struct {
     /// Instructions in this block, ending with a terminating instruction
     instructions: std.ArrayList(*Instruction),
     /// Allocator for memory management
-    alloc: std.mem.Allocator,
+    alloc: Allocator,
 
     /// Initialize a new block with the given label
-    pub fn init(allocator: std.mem.Allocator, label: []const u8) !Block {
+    pub fn init(allocator: Allocator, label: []const u8) !Block {
         const copied_label = try allocator.dupe(u8, label);
         return .{
             .label = copied_label,
@@ -35,21 +36,34 @@ pub const Block = struct {
 
     /// Deinitialize the block and free instruction list
     pub fn deinit(self: *Block) void {
-        self.instructions.deinit(self.alloc);
         self.alloc.free(self.label);
+        // Free each instruction and its contents
+        for (self.instructions.items) |instr| {
+            switch (instr.rhs) {
+                .call => |call| {
+                    // Free call arguments
+                    for (call.args.items) |arg| {
+                        call.alloc.free(arg.value);
+                        call.alloc.destroy(arg);
+                    }
+                    call.deinit();
+                    self.alloc.destroy(call);
+                },
+                .ret => {},
+            }
+            self.alloc.destroy(instr);
+        }
+        self.instructions.deinit(self.alloc);
     }
 
-    /// Add an instruction to this block
-    pub fn addInstruction(self: *Block, i: *Instruction) !void {
-        try self.instructions.append(self.alloc, i);
-    }
-
+    // Create a new call instruction with the name and add it to this block
+    // The created call will have no arguments
     pub fn addNewCall(self: *Block, name: []const u8) !*Call {
         const instr: *Instruction = try self.alloc.create(Instruction);
         const call: *Call = try self.alloc.create(Call);
         call.* = try Call.init(self.alloc, name);
         instr.* = .{ .lhs = null, .assign_type = null, .rhs = .{ .call = call } };
-        try self.addInstruction(instr);
+        try self.instructions.append(self.alloc, instr);
         return call;
     }
 
@@ -78,24 +92,20 @@ pub const Function = struct {
     /// Map of block labels to blocks (maintains insertion order for emission)
     blocks: std.StringArrayHashMap(*Block),
     /// Allocator for memory management
-    allocator: std.mem.Allocator,
+    allocator: Allocator,
     /// Pointer to current block
-    current_block: *Block,
+    current_block: ?*Block,
 
     /// Initialize a new function with the given name and linkage
     /// name needs to outlive the struct lifetime
     pub fn init(
-        allocator: std.mem.Allocator,
+        allocator: Allocator,
         name: []const u8,
         return_type: ?Type,
         linkage: Linkage,
     ) !Function {
-
         // Copy name
         const copied_name = try allocator.dupe(u8, name);
-        // every function starts with a @start block
-        const start_block = try allocator.create(Block);
-        start_block.* = try Block.init(allocator, "start");
         var func: Function = .{
             .name = copied_name,
             .return_type = return_type,
@@ -103,15 +113,23 @@ pub const Function = struct {
             .params = try std.ArrayList(*Parameter).initCapacity(allocator, 4),
             .blocks = std.StringArrayHashMap(*Block).init(allocator),
             .allocator = allocator,
-            .current_block = start_block,
+            .current_block = null,
         };
-        try func.addBlock(start_block);
+        // every function starts with a @start block
+        const start_block = try func.createBlock("start");
+        func.current_block = start_block;
         return func;
     }
 
     /// Deinitialize the function and free all resources
     pub fn deinit(self: *Function) void {
+        self.allocator.free(self.name);
+        // Free parameters
+        for (self.params.items) |param| {
+            self.allocator.destroy(param);
+        }
         self.params.deinit(self.allocator);
+        // Free blocks
         var block_iter = self.blocks.iterator();
         while (block_iter.next()) |entry| {
             const block = entry.value_ptr.*;
@@ -119,18 +137,25 @@ pub const Function = struct {
             self.allocator.destroy(block);
         }
         self.blocks.deinit();
-        self.allocator.free(self.name);
     }
 
-    /// Add a parameter to the function signature
-    pub fn addParameter(self: *Function, param: *Parameter) !void {
+    /// Add a parameter to the function signature with the given name and type
+    pub fn createParameter(self: *Function, name: []const u8, t: Type) !*Parameter {
+        const param = try self.allocator.create(Parameter);
+        param.* = .{ .param_type = t, .name = name };
+
         try self.params.append(self.allocator, param);
+        return param;
     }
 
-    /// Add a block to the function body
-    /// The block is moved into the function's ownership
-    pub fn addBlock(self: *Function, block: *Block) !void {
+    /// Create a block and add it to this function's list of blocks
+    /// Returns a pointer to the created block
+    pub fn createBlock(self: *Function, label: []const u8) !*Block {
+        const block = try self.allocator.create(Block);
+        block.* = try Block.init(self.allocator, label);
         try self.blocks.put(block.label, block);
+
+        return block;
     }
 
     /// Get a block by its label (returns null if not found)
@@ -181,10 +206,10 @@ pub const Function = struct {
 /// Struct corresponding to function section of QBE IR (array of function definitions)
 pub const FunctionSection = struct {
     functions: std.ArrayList(*Function),
-    allocator: std.mem.Allocator,
+    allocator: Allocator,
 
     /// Create new function section
-    pub fn init(allocator: std.mem.Allocator) FunctionSection {
+    pub fn init(allocator: Allocator) FunctionSection {
         return .{
             .functions = std.ArrayList(*Function).empty,
             .allocator = allocator,
@@ -195,6 +220,7 @@ pub const FunctionSection = struct {
     pub fn deinit(self: *FunctionSection) void {
         for (self.functions.items) |func| {
             func.deinit();
+            self.allocator.destroy(func);
         }
         self.functions.deinit(self.allocator);
     }
