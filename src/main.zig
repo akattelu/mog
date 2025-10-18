@@ -264,7 +264,6 @@ test {
     const pretty_printer_tests = @import("tests/pretty_printer.test.zig");
     const qbe_data_tests = @import("qbe/tests/data.test.zig");
     const qbe_function_tests = @import("qbe/tests/function.test.zig");
-    const qbe_instruction_tests = @import("qbe/tests/instruction.test.zig");
 
     std.testing.refAllDecls(token_tests);
     std.testing.refAllDecls(lexer_tests);
@@ -273,5 +272,4 @@ test {
     std.testing.refAllDecls(pretty_printer_tests);
     std.testing.refAllDecls(qbe_data_tests);
     std.testing.refAllDecls(qbe_function_tests);
-    std.testing.refAllDecls(qbe_instruction_tests);
 }

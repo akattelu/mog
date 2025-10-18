@@ -1,9 +1,5 @@
 const std = @import("std");
-const instruction = @import("instruction.zig");
-const Instruction = instruction.Instruction;
-const Call = instruction.Call;
 const Allocator = std.mem.Allocator;
-const Ret = instruction.Ret;
 
 /// QBE function linkage types
 pub const Linkage = enum {
