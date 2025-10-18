@@ -11,7 +11,7 @@ pub const Instruction = struct {
     /// The instruction operation and its operands
     rhs: union(InstructionType) {
         call: *Call,
-        ret: Ret,
+        ret: *Ret,
     },
 
     /// Emit instruction to writer
@@ -38,9 +38,6 @@ pub const Instruction = struct {
 /// This enum will be expanded as more instruction types are implemented
 pub const InstructionType = enum { call, ret };
 
-/// QBE instruction
-/// Represents a single instruction in a basic block
-///
 /// QBE call instruction argument
 pub const Argument = struct {
     /// Argument type
@@ -69,7 +66,6 @@ pub const Call = struct {
 
     pub fn add_arg(self: *Call, arg_type: Type, arg: []const u8) !void {
         const arg_ptr = try self.alloc.create(Argument);
-        // FIXME: make sure deinit() frees this name
         const arg_name_copy = try self.alloc.dupe(u8, arg);
         arg_ptr.* = .{
             .arg_type = arg_type,
@@ -79,6 +75,10 @@ pub const Call = struct {
     }
 
     pub fn deinit(self: *Call) void {
+        for (self.args.items) |arg| {
+            self.alloc.free(arg.value);
+            self.alloc.destroy(arg);
+        }
         self.args.deinit(self.alloc);
         self.alloc.free(self.function_name);
     }
@@ -89,7 +89,7 @@ pub const Call = struct {
         try writer.print("call ${s}(", .{self.function_name});
         for (self.args.items, 0..) |arg, i| {
             if (i > 0) try writer.print(", ", .{});
-            try writer.print("{s} {s}", .{ @tagName(arg.arg_type), arg.value });
+            try writer.print("{s} ${s}", .{ @tagName(arg.arg_type), arg.value });
         }
         try writer.print(")", .{});
     }

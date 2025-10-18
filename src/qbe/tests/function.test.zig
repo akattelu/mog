@@ -63,10 +63,11 @@ test "FunctionSection allocation and deallocation" {
 
     // Add a return instruction
     const ret_instr = try alloc.create(Instruction);
+    var ret: Ret = Ret{ .value = "0" };
     ret_instr.* = .{
         .lhs = null,
         .assign_type = null,
-        .rhs = .{ .ret = .{ .value = "0" } },
+        .rhs = .{ .ret = &ret },
     };
     try func1.current_block.?.instructions.append(alloc, ret_instr);
 
@@ -109,8 +110,8 @@ test "FunctionSection.emit outputs correct QBE IR" {
     // Add instructions to start block
     // %sum =w add %a, %b (we'll use a call as placeholder since add isn't implemented yet)
     const call = try func.current_block.?.addNewCall("__internal_add");
-    try call.add_arg(.w, "%a");
-    try call.add_arg(.w, "%b");
+    try call.add_arg(.w, "a");
+    try call.add_arg(.w, "b");
 
     // Modify the instruction to have an assignment
     func.current_block.?.instructions.items[0].lhs = "sum";
@@ -118,10 +119,11 @@ test "FunctionSection.emit outputs correct QBE IR" {
 
     // Add return instruction
     const ret_instr = try alloc.create(Instruction);
+    var ret: Ret = .{ .value = "%sum" };
     ret_instr.* = .{
         .lhs = null,
         .assign_type = null,
-        .rhs = .{ .ret = .{ .value = "%sum" } },
+        .rhs = .{ .ret = &ret },
     };
     try func.current_block.?.instructions.append(alloc, ret_instr);
 
@@ -132,7 +134,7 @@ test "FunctionSection.emit outputs correct QBE IR" {
     const expected =
         "export function w $add(w %a, w %b) {\n" ++
         "@start\n" ++
-        "\t%sum =w call $__internal_add(w %a, w %b)\n" ++
+        "\t%sum =w call $__internal_add(w $a, w $b)\n" ++
         "\tret %sum\n" ++
         "}\n";
 

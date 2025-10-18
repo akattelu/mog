@@ -41,11 +41,6 @@ pub const Block = struct {
         for (self.instructions.items) |instr| {
             switch (instr.rhs) {
                 .call => |call| {
-                    // Free call arguments
-                    for (call.args.items) |arg| {
-                        call.alloc.free(arg.value);
-                        call.alloc.destroy(arg);
-                    }
                     call.deinit();
                     self.alloc.destroy(call);
                 },
@@ -59,10 +54,15 @@ pub const Block = struct {
     // Create a new call instruction with the name and add it to this block
     // The created call will have no arguments
     pub fn addNewCall(self: *Block, name: []const u8) !*Call {
+        // Create instruction pointer
         const instr: *Instruction = try self.alloc.create(Instruction);
+
+        // Create inner union pointer for call
         const call: *Call = try self.alloc.create(Call);
         call.* = try Call.init(self.alloc, name);
         instr.* = .{ .lhs = null, .assign_type = null, .rhs = .{ .call = call } };
+
+        // Add instruction
         try self.instructions.append(self.alloc, instr);
         return call;
     }
