@@ -19,6 +19,6 @@ test "instruction emit and free" {
     try i.emit(&writer.writer);
 
     try std.testing.expectEqualStrings(
-        \\call $test(w $arg1)
+        \\call test(w $arg1)
     , writer.written());
 }

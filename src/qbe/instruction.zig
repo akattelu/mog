@@ -59,7 +59,7 @@ pub const Call = struct {
         const name_copy = try alloc.dupe(u8, name);
         return .{
             .alloc = alloc,
-            .args = try std.ArrayList(*Argument).initCapacity(alloc, 3),
+            .args = std.ArrayList(*Argument).empty,
             .function_name = name_copy,
         };
     }
@@ -86,7 +86,7 @@ pub const Call = struct {
     /// Emit call instruction to writer
     /// Format: call $function_name(type arg1, type arg2, ...)
     pub fn emit(self: *const Call, writer: *std.Io.Writer) !void {
-        try writer.print("call ${s}(", .{self.function_name});
+        try writer.print("call {s}(", .{self.function_name});
         for (self.args.items, 0..) |arg, i| {
             if (i > 0) try writer.print(", ", .{});
             try writer.print("{s} ${s}", .{ @tagName(arg.arg_type), arg.value });
@@ -103,8 +103,8 @@ pub const Ret = struct {
     /// Emit return instruction to writer
     /// Format: ret or ret %value
     pub fn emit(self: *const Ret, writer: *std.Io.Writer) !void {
-        if (self.value) |val| {
-            try writer.print("ret {s}", .{val});
+        if (self.value != null) {
+            try writer.print("ret {s}", .{self.value.?});
         } else {
             try writer.print("ret", .{});
         }

@@ -889,9 +889,15 @@ pub const FunctionCallExpression = struct {
                         // Add string literal to data section
                         const string_data_ref = try c.data.addString(s.value);
 
+                        const alloc = c.alloc;
                         // Add instruction
-                        const call = try c.current_function.current_block.?.addNewCall(cbuiltin.name);
-                        try call.add_arg(.l, string_data_ref);
+                        const vname = try c.current_function.current_block.?.getTemporaryVariableName();
+                        defer alloc.free(vname);
+
+                        const call_instr = try std.fmt.allocPrint(alloc, "{s} =w call {s}(l ${s})", .{ vname, cbuiltin.name, string_data_ref });
+                        defer alloc.free(call_instr);
+
+                        try c.current_function.current_block.?.addInstruction(call_instr);
                     },
 
                     else => unreachable,
@@ -1559,6 +1565,10 @@ pub const Program = struct {
     pub fn compile(self: *const Program, c: *Compiler) !void {
         for (self.statements) |stmt| {
             try stmt.compile(c);
+        }
+
+        if (!std.mem.eql(u8, c.current_function.current_block.?.instructions.getLast(), "ret")) {
+            try c.current_function.current_block.?.addInstruction("ret");
         }
     }
 };

@@ -237,7 +237,7 @@ pub fn build(args: *std.process.ArgIterator) CommandErrUnion!u8 {
     // Read contents
     var input_buffer: [2048]u8 = undefined;
     var reader = file_handle.reader(&input_buffer);
-    const alloc = std.heap.smp_allocator;
+    const alloc = std.heap.page_allocator;
     const file_data = try reader.interface.readAlloc(alloc, file_size);
 
     // Create and run parser

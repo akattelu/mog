@@ -2,8 +2,8 @@ const std = @import("std");
 const instruction = @import("instruction.zig");
 const Instruction = instruction.Instruction;
 const Call = instruction.Call;
-const Type = instruction.Type;
 const Allocator = std.mem.Allocator;
+const Ret = instruction.Ret;
 
 /// QBE function linkage types
 pub const Linkage = enum {
@@ -13,14 +13,17 @@ pub const Linkage = enum {
     section,
 };
 
+/// QBE instruction data types
+pub const Type = enum { w, l, s, d, sb, ub, sh, uh };
+
 /// QBE basic block
 /// A block is a sequence of instructions with a single entry point (the label)
 /// and a single exit point (a terminating instruction like ret or jmp)
 pub const Block = struct {
     /// Block label (without @ sigil, e.g., "start", "loop_body")
     label: []const u8,
-    /// Instructions in this block, ending with a terminating instruction
-    instructions: std.ArrayList(*Instruction),
+    /// For now, store instruction as strings
+    instructions: std.ArrayList([]const u8),
     /// Allocator for memory management
     alloc: Allocator,
 
@@ -29,7 +32,7 @@ pub const Block = struct {
         const copied_label = try allocator.dupe(u8, label);
         return .{
             .label = copied_label,
-            .instructions = try std.ArrayList(*Instruction).initCapacity(allocator, 5),
+            .instructions = std.ArrayList([]const u8).empty,
             .alloc = allocator,
         };
     }
@@ -51,20 +54,16 @@ pub const Block = struct {
         self.instructions.deinit(self.alloc);
     }
 
-    // Create a new call instruction with the name and add it to this block
-    // The created call will have no arguments
-    pub fn addNewCall(self: *Block, name: []const u8) !*Call {
-        // Create instruction pointer
-        const instr: *Instruction = try self.alloc.create(Instruction);
+    pub fn addInstruction(self: *Block, instr: []const u8) !void {
+        const owned = try self.alloc.dupe(u8, instr);
+        try self.instructions.append(self.alloc, owned);
+    }
 
-        // Create inner union pointer for call
-        const call: *Call = try self.alloc.create(Call);
-        call.* = try Call.init(self.alloc, name);
-        instr.* = .{ .lhs = null, .assign_type = null, .rhs = .{ .call = call } };
+    /// Caller is responsible for freeing
+    pub fn getTemporaryVariableName(self: *Block) ![]const u8 {
+        const idx = self.instructions.items.len;
 
-        // Add instruction
-        try self.instructions.append(self.alloc, instr);
-        return call;
+        return try std.fmt.allocPrint(self.alloc, "%var{d}", .{idx});
     }
 
     /// Emit block to writer
@@ -73,7 +72,7 @@ pub const Block = struct {
         try writer.print("@{s}\n", .{self.label});
         for (self.instructions.items) |i| {
             try writer.writeByte('\t');
-            try i.emit(writer);
+            try writer.writeAll(i);
             try writer.writeByte('\n');
         }
     }
@@ -110,7 +109,7 @@ pub const Function = struct {
             .name = copied_name,
             .return_type = return_type,
             .linkage = linkage,
-            .params = try std.ArrayList(*Parameter).initCapacity(allocator, 4),
+            .params = std.ArrayList(*Parameter).empty,
             .blocks = std.StringArrayHashMap(*Block).init(allocator),
             .allocator = allocator,
             .current_block = null,

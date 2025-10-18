@@ -8,32 +8,30 @@ const FunctionSection = function.FunctionSection;
 
 /// QBECompiler updates and emits a stored state for a QBE program
 pub const QBECompiler = struct {
-    arena: std.heap.ArenaAllocator,
+    alloc: std.mem.Allocator,
     data: *data.Data,
     functions: *FunctionSection,
     current_function: *function.Function,
 
     /// Returns an initialized QBECompiler
     pub fn init(alloc: std.mem.Allocator) !QBECompiler {
-        var arena = std.heap.ArenaAllocator.init(alloc);
-        const arena_allocator = arena.allocator();
 
         // Create data section
-        const data_section: *data.Data = try arena_allocator.create(data.Data);
-        data_section.* = data.Data.init(arena_allocator);
+        const data_section: *data.Data = try alloc.create(data.Data);
+        data_section.* = data.Data.init(alloc);
         // data_section.* = .{ .items = .{}, .alloc = arena_allocator };
 
         // Create function section
-        var functions = try arena_allocator.create(FunctionSection);
-        functions.* = FunctionSection.init(arena_allocator);
+        var functions = try alloc.create(FunctionSection);
+        functions.* = FunctionSection.init(alloc);
 
         // Add main function
-        const main = try arena_allocator.create(function.Function);
-        main.* = try function.Function.init(arena_allocator, "main", .w, .@"export");
+        const main = try alloc.create(function.Function);
+        main.* = try function.Function.init(alloc, "main", .w, .@"export");
         try functions.add(main);
 
         return .{
-            .arena = arena,
+            .alloc = alloc,
             .data = data_section,
             .functions = functions,
             .current_function = main,
@@ -41,7 +39,8 @@ pub const QBECompiler = struct {
     }
 
     pub fn deinit(self: *QBECompiler) void {
-        self.arena.deinit();
+        self.data.deinit();
+        self.functions.deinit();
     }
 
     /// Emit QBE IR to the writer
@@ -54,7 +53,6 @@ pub const QBECompiler = struct {
 
     /// Emit QBE IR to a file specified by subpath
     pub fn emitFile(self: *QBECompiler, subpath: []const u8) !void {
-        std.log.info("emitting file {s} with compiler state: {any}", .{ subpath, self });
         const file_handle = try std.fs.cwd().createFile(subpath, .{});
         defer file_handle.close();
 
