@@ -3,6 +3,7 @@ const token = @import("token.zig");
 const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
 const qbe = @import("qbe/compiler.zig");
 const Compiler = qbe.QBECompiler;
+const Temporary = @import("qbe/symbol_table.zig").Temporary;
 const Writer = std.Io.Writer;
 const AllocatorError = std.mem.Allocator.Error;
 const testing = std.testing;
@@ -646,9 +647,10 @@ pub const Expression = union(ExpressionTypes) {
     }
 
     /// Emit IR with Compiler
-    pub fn compile(self: *const Expression, c: *Compiler) ![]const u8 {
+    pub fn compile(self: *const Expression, c: *Compiler) !*Temporary {
         return switch (self.*) {
             .FunctionCall => |n| try n.compile(c),
+            .Number => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -888,7 +890,7 @@ pub const FunctionCallExpression = struct {
     }
 
     /// Emit IR with Compiler
-    pub fn compile(self: *const FunctionCallExpression, c: *Compiler) ![]const u8 {
+    pub fn compile(self: *const FunctionCallExpression, c: *Compiler) !*Temporary {
         return switch (self.function.*) {
             .CBuiltin => |cbuiltin| {
                 switch (self.args) {
@@ -896,15 +898,15 @@ pub const FunctionCallExpression = struct {
                         // Add string literal to data section
                         const string_data_ref = try c.data.addString(s.value);
 
-                        const alloc = c.alloc;
                         // Add instruction
                         const vname = try c.current_function.current_block.?.getTemporaryVariableName();
-                        defer alloc.free(vname);
+                        defer c.alloc.free(vname);
 
-                        const call_instr = try std.fmt.allocPrint(alloc, "{s} =w call {s}(l ${s})", .{ vname, cbuiltin.name, string_data_ref });
-                        defer alloc.free(call_instr);
+                        const call_instr = try std.fmt.allocPrint(c.alloc, "call {s}(l ${s})", .{ cbuiltin.name, string_data_ref });
+                        defer c.alloc.free(call_instr);
 
-                        return try c.current_function.current_block.?.addInstruction(call_instr);
+                        const tmp = try c.addInstruction(.function, .w, call_instr);
+                        return tmp;
                     },
 
                     else => unreachable,
@@ -1091,6 +1093,13 @@ pub const NumberLiteral = struct {
                 try pp.print("{d}", .{f});
             },
         }
+    }
+
+    /// Make instruction for copying number literal to new temporary
+    pub fn compile(self: *const NumberLiteral, c: *Compiler) !*Temporary {
+        _ = self;
+        _ = c;
+        return AllocatorError.OutOfMemory;
     }
 };
 
@@ -1544,7 +1553,7 @@ pub const Program = struct {
     /// Writes the program to the given writer in valid source code format.
     /// Single-statement programs are written inline; multi-statement programs
     /// have each statement on its own line.
-    pub fn write(self: *const Program, writer: *Writer) std.Io.Writer.Error!void {
+    pub fn write(self: *const Program, writer: *Writer) Writer.Error!void {
         if (self.statements.len == 1) {
             try self.statements[0].write(writer);
         } else {

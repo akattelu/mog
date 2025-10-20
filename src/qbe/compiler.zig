@@ -7,6 +7,8 @@ pub const Function = function;
 const Writer = std.Io.Writer;
 const FunctionSection = function.FunctionSection;
 const SymbolTable = symbol_table.SymbolTable;
+const Temporary = symbol_table.Temporary;
+const Sigil = symbol_table.Sigil;
 
 /// QBECompiler updates and emits a stored state for a QBE program
 pub const QBECompiler = struct {
@@ -69,12 +71,16 @@ pub const QBECompiler = struct {
     }
 
     /// Add a structured instruction to the current function current block state
-    pub fn addInstruction(self: *QBECompiler, temp: *symbol_table.Temporary, datatype: function.Type, rhs: []const u8) !void {
+    pub fn addInstruction(self: *QBECompiler, sigil: Sigil, datatype: function.Type, rhs: []const u8) !*Temporary {
+        const temp = try self.symbol_table.createTemporary(sigil);
         const instr = try std.fmt.allocPrint(self.alloc, "{s}{s} ={s} {s}", .{ switch (temp.sigil) {
             .function => "%",
             .global => "$",
         }, temp.name, @tagName(datatype), rhs });
         defer self.alloc.free(instr);
         _ = try self.current_function.current_block.?.addInstruction(instr);
+
+        // Return temp incase caller needs to use variable
+        return temp;
     }
 };
