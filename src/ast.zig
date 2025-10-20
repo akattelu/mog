@@ -1097,9 +1097,20 @@ pub const NumberLiteral = struct {
 
     /// Make instruction for copying number literal to new temporary
     pub fn compile(self: *const NumberLiteral, c: *Compiler) !*Temporary {
-        _ = self;
-        _ = c;
-        return AllocatorError.OutOfMemory;
+        switch (self.value) {
+            .Integer => |i| {
+                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{i});
+                defer c.alloc.free(instr);
+                // Use long data type
+                return try c.addInstruction(.function, .l, instr);
+            },
+            .Float => |f| {
+                // Always use double data type for instruction and return type
+                const instr = try std.fmt.allocPrint(c.alloc, "copy d_{d}", .{f});
+                defer c.alloc.free(instr);
+                return try c.addInstruction(.function, .d, instr);
+            },
+        }
     }
 };
 
