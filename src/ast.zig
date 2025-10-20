@@ -82,7 +82,8 @@ pub const Statement = union(StatementTypes) {
     /// Emit IR with Compiler
     pub fn compile(self: *const Statement, c: *Compiler) !void {
         switch (self.*) {
-            .Expression => |n| try n.expr.compile(c),
+            .Expression => |n| _ = try n.expr.compile(c),
+            .Assignment => |n| try n.compile(c),
             else => unreachable,
         }
     }
@@ -158,6 +159,12 @@ pub const AssignmentStatement = struct {
         }
         try pp.write(" = ");
         try self.expr.pretty(pp);
+    }
+
+    // TODO
+    pub fn compile(self: *const AssignmentStatement, c: *Compiler) !void {
+        _ = self;
+        _ = c;
     }
 };
 
@@ -639,11 +646,11 @@ pub const Expression = union(ExpressionTypes) {
     }
 
     /// Emit IR with Compiler
-    pub fn compile(self: *const Expression, c: *Compiler) !void {
-        switch (self.*) {
+    pub fn compile(self: *const Expression, c: *Compiler) ![]const u8 {
+        return switch (self.*) {
             .FunctionCall => |n| try n.compile(c),
             else => unreachable,
-        }
+        };
     }
 };
 
@@ -881,8 +888,8 @@ pub const FunctionCallExpression = struct {
     }
 
     /// Emit IR with Compiler
-    pub fn compile(self: *const FunctionCallExpression, c: *Compiler) !void {
-        switch (self.function.*) {
+    pub fn compile(self: *const FunctionCallExpression, c: *Compiler) ![]const u8 {
+        return switch (self.function.*) {
             .CBuiltin => |cbuiltin| {
                 switch (self.args) {
                     .StringLiteral => |s| {
@@ -897,14 +904,14 @@ pub const FunctionCallExpression = struct {
                         const call_instr = try std.fmt.allocPrint(alloc, "{s} =w call {s}(l ${s})", .{ vname, cbuiltin.name, string_data_ref });
                         defer alloc.free(call_instr);
 
-                        try c.current_function.current_block.?.addInstruction(call_instr);
+                        return try c.current_function.current_block.?.addInstruction(call_instr);
                     },
 
                     else => unreachable,
                 }
             },
             else => unreachable,
-        }
+        };
     }
 };
 
@@ -1568,7 +1575,7 @@ pub const Program = struct {
         }
 
         if (!std.mem.eql(u8, c.current_function.current_block.?.instructions.getLast(), "ret")) {
-            try c.current_function.current_block.?.addInstruction("ret");
+            _ = try c.current_function.current_block.?.addInstruction("ret");
         }
     }
 };

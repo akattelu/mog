@@ -50,9 +50,10 @@ pub const Block = struct {
         self.instructions.deinit(self.alloc);
     }
 
-    pub fn addInstruction(self: *Block, instr: []const u8) !void {
+    pub fn addInstruction(self: *Block, instr: []const u8) ![]const u8 {
         const owned = try self.alloc.dupe(u8, instr);
         try self.instructions.append(self.alloc, owned);
+        return owned;
     }
 
     /// Caller is responsible for freeing
