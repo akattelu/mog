@@ -4,15 +4,14 @@ const Lexer = @import("../../lexer.zig").Lexer;
 const Parser = @import("../../parser.zig").Parser;
 const QBECompiler = @import("../compiler.zig").QBECompiler;
 
-test "compile simple puts statement" {
-
-    // Inline test source code
-    const source = "$puts \"hello world\"";
-
-    // Create and run parser (mimicking build function from main.zig)
+/// Helper function to compile source code to QBE IR
+/// Caller must free the returned string with allocator
+fn compileToQBE(source: []const u8) ![]const u8 {
+    // Create and run lexer
     var lexer = try Lexer.init(alloc, source);
     defer lexer.deinit();
 
+    // Create and run parser
     var parser = try Parser.init(alloc, &lexer);
     defer parser.deinit();
 
@@ -30,14 +29,30 @@ test "compile simple puts statement" {
 
     try compiler.emit(&writer.writer);
 
-    const output = writer.written();
+    // Return owned copy of the output
+    return try alloc.dupe(u8, writer.written());
+}
+
+/// Helper function to assert that IR output contains expected substrings
+fn expectIRContains(ir: []const u8, expected: []const []const u8) !void {
+    for (expected) |substring| {
+        try std.testing.expect(std.mem.indexOf(u8, ir, substring) != null);
+    }
+}
+
+test "compile simple puts statement" {
+    const source = "$puts \"hello world\"";
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
 
     // Verify the output contains expected components
-    try std.testing.expect(std.mem.indexOf(u8, output, "data $str_0 = { b \"hello world\", b 0 }") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "export function w $main()") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "@start") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "call $puts(l $str_0)") != null);
-    try std.testing.expect(std.mem.indexOf(u8, output, "ret") != null);
+    try expectIRContains(ir, &.{
+        "data $str_0 = { b \"hello world\", b 0 }",
+        "export function w $main()",
+        "@start",
+        "call $puts(l $str_0)",
+        "ret",
+    });
 }
 
 test "add instruction helper" {
