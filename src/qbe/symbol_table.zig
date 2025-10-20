@@ -6,6 +6,7 @@ pub const Sigil = enum { function, global };
 /// Manages scopes and holds associations between variables and SSA temporaries
 pub const SymbolTable = struct {
     scopes: std.ArrayList(*Scope),
+    temporaries: std.ArrayList(*Temporary),
     next_var_id: u32,
     alloc: Allocator,
 
@@ -16,18 +17,26 @@ pub const SymbolTable = struct {
     pub fn init(alloc: Allocator) !SymbolTable {
         var symtab: SymbolTable = .{
             .alloc = alloc,
-            .scopes = std.ArrayList(*Scope).empty,
+            .scopes = .empty,
             .next_var_id = 0,
+            .temporaries = .empty,
         };
         try symtab.pushScope(); // Init table with 1 scope (main/global)
         return symtab;
     }
 
+    /// Deinit the symbol table and free all memory
     pub fn deinit(self: *SymbolTable) void {
         for (0..(self.scopes.items.len + 1)) |_| {
             self.popScope();
         }
         self.scopes.deinit(self.alloc);
+
+        for (self.temporaries.items) |temp| {
+            self.alloc.free(temp.name);
+            self.alloc.destroy(temp);
+        }
+        self.temporaries.deinit(self.alloc);
     }
 
     /// Pushes a new empty scope map into the stack
@@ -44,11 +53,8 @@ pub const SymbolTable = struct {
             var iter = last_scope.iterator();
             while (iter.next()) |entry| {
                 const var_name = entry.key_ptr.*;
-                const temp = entry.value_ptr.*;
-
                 self.alloc.free(var_name);
-                self.alloc.free(temp.name);
-                self.alloc.destroy(temp);
+                // NOTE: all temporaries will be freed by deinit
             }
             // Free the map itself
             last_scope.deinit();
@@ -92,6 +98,7 @@ pub const SymbolTable = struct {
     pub fn createTemporary(self: *SymbolTable, sigil: Sigil) !*Temporary {
         const temp = try self.alloc.create(Temporary);
         temp.* = .{ .name = try std.fmt.allocPrint(self.alloc, "var{d}", .{self.next_var_id}), .sigil = sigil };
+        try self.temporaries.append(self.alloc, temp);
 
         // Increment variable number
         self.next_var_id = self.next_var_id + 1;
@@ -99,6 +106,7 @@ pub const SymbolTable = struct {
     }
 };
 
+/// Holds a tuple of sigil (func/global) and temp name
 pub const Temporary = struct {
     sigil: Sigil,
     name: []const u8,

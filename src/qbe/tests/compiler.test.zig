@@ -1,10 +1,10 @@
 const std = @import("std");
+const alloc = std.testing.allocator;
 const Lexer = @import("../../lexer.zig").Lexer;
 const Parser = @import("../../parser.zig").Parser;
 const QBECompiler = @import("../compiler.zig").QBECompiler;
 
 test "compile simple puts statement" {
-    const alloc = std.testing.allocator;
 
     // Inline test source code
     const source = "$puts \"hello world\"";
@@ -38,4 +38,18 @@ test "compile simple puts statement" {
     try std.testing.expect(std.mem.indexOf(u8, output, "@start") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "call $puts(l $str_0)") != null);
     try std.testing.expect(std.mem.indexOf(u8, output, "ret") != null);
+}
+
+test "add instruction helper" {
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+    var compiler = try QBECompiler.init(alloc);
+    defer compiler.deinit();
+
+    const temp = try compiler.symbol_table.createTemporary(.function);
+    try compiler.addInstruction(temp, .w, "call $puts(w %str_0)");
+
+    try compiler.emit(&writer.writer);
+
+    try std.testing.expect(std.mem.indexOf(u8, writer.written(), "%var0 =w call $puts(w %str_0)") != null);
 }
