@@ -26,11 +26,7 @@ pub const QBECompiler = struct {
         // Create function section
         var functions = try alloc.create(FunctionSection);
         functions.* = FunctionSection.init(alloc);
-
-        // Add main function
-        const main = try alloc.create(function.Function);
-        main.* = try function.Function.init(alloc, "main", .w, .@"export");
-        try functions.add(main);
+        const main = try functions.addMainFunction();
 
         const symtab = try alloc.create(SymbolTable);
         symtab.* = try SymbolTable.init(alloc);
@@ -46,11 +42,11 @@ pub const QBECompiler = struct {
 
     pub fn deinit(self: *QBECompiler) void {
         self.data.deinit();
+        self.alloc.destroy(self.data);
         self.functions.deinit();
+        self.alloc.destroy(self.functions);
         self.symbol_table.deinit();
         self.alloc.destroy(self.symbol_table);
-        // FIXME: need to deallocate the data and function as well
-        // TODO: add a test that verifies no leaks with this
     }
 
     /// Emit QBE IR to the writer

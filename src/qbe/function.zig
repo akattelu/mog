@@ -36,16 +36,9 @@ pub const Block = struct {
     /// Deinitialize the block and free instruction list
     pub fn deinit(self: *Block) void {
         self.alloc.free(self.label);
-        // Free each instruction and its contents
+        // Free each instruction string
         for (self.instructions.items) |instr| {
-            switch (instr.rhs) {
-                .call => |call| {
-                    call.deinit();
-                    self.alloc.destroy(call);
-                },
-                .ret => {},
-            }
-            self.alloc.destroy(instr);
+            self.alloc.free(instr);
         }
         self.instructions.deinit(self.alloc);
     }
@@ -224,6 +217,14 @@ pub const FunctionSection = struct {
     /// Add a function to the section
     pub fn add(self: *FunctionSection, func: *Function) !void {
         try self.functions.append(self.allocator, func);
+    }
+
+    pub fn addMainFunction(self: *FunctionSection) !*Function {
+        // Add main function
+        const main = try self.allocator.create(Function);
+        main.* = try Function.init(self.allocator, "main", .w, .@"export");
+        try self.add(main);
+        return main;
     }
 
     /// Emit IR for the function section

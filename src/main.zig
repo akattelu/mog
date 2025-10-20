@@ -265,6 +265,7 @@ test {
     const qbe_data_tests = @import("qbe/tests/data.test.zig");
     const qbe_function_tests = @import("qbe/tests/function.test.zig");
     const qbe_symbol_table_tests = @import("qbe/tests/symbol_table.test.zig");
+    const qbe_compiler_tests = @import("qbe/tests/compiler.test.zig");
 
     std.testing.refAllDecls(token_tests);
     std.testing.refAllDecls(lexer_tests);
@@ -274,4 +275,5 @@ test {
     std.testing.refAllDecls(qbe_data_tests);
     std.testing.refAllDecls(qbe_function_tests);
     std.testing.refAllDecls(qbe_symbol_table_tests);
+    std.testing.refAllDecls(qbe_compiler_tests);
 }
