@@ -1,6 +1,6 @@
 const std = @import("std");
 const SymbolTable = @import("../symbol_table.zig").SymbolTable;
-const Sigil = @import("../symbol_table.zig").SymbolTable.Sigil;
+const Sigil = @import("../symbol_table.zig").Sigil;
 
 test "SymbolTable: init creates table with one scope" {
     var symtab = try SymbolTable.init(std.testing.allocator);
@@ -14,9 +14,15 @@ test "SymbolTable: define with function sigil creates correct SSA name" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const ssa_name = try symtab.define("foo", .function);
+    const temp = try symtab.define("foo", .function);
 
+    try std.testing.expectEqualStrings("var0", temp.name);
+    try std.testing.expectEqual(Sigil.function, temp.sigil);
+
+    const ssa_name = try temp.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa_name);
     try std.testing.expectEqualStrings("%var0", ssa_name);
+
     try std.testing.expectEqual(@as(u32, 1), symtab.next_var_id);
 }
 
@@ -24,9 +30,15 @@ test "SymbolTable: define with global sigil creates correct SSA name" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const ssa_name = try symtab.define("bar", .global);
+    const temp = try symtab.define("bar", .global);
 
+    try std.testing.expectEqualStrings("var0", temp.name);
+    try std.testing.expectEqual(Sigil.global, temp.sigil);
+
+    const ssa_name = try temp.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa_name);
     try std.testing.expectEqualStrings("$var0", ssa_name);
+
     try std.testing.expectEqual(@as(u32, 1), symtab.next_var_id);
 }
 
@@ -34,9 +46,16 @@ test "SymbolTable: define increments var_id sequentially" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const ssa1 = try symtab.define("x", .function);
-    const ssa2 = try symtab.define("y", .function);
-    const ssa3 = try symtab.define("z", .global);
+    const temp1 = try symtab.define("x", .function);
+    const temp2 = try symtab.define("y", .function);
+    const temp3 = try symtab.define("z", .global);
+
+    const ssa1 = try temp1.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa1);
+    const ssa2 = try temp2.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa2);
+    const ssa3 = try temp3.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa3);
 
     try std.testing.expectEqualStrings("%var0", ssa1);
     try std.testing.expectEqualStrings("%var1", ssa2);
@@ -52,7 +71,10 @@ test "SymbolTable: lookup finds variable in current scope" {
 
     const result = symtab.lookup("foo");
     try std.testing.expect(result != null);
-    try std.testing.expectEqualStrings("%var0", result.?);
+
+    const ssa_name = try result.?.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa_name);
+    try std.testing.expectEqualStrings("%var0", ssa_name);
 }
 
 test "SymbolTable: lookup returns null for undefined variable" {
@@ -105,11 +127,15 @@ test "SymbolTable: lookup searches through nested scopes" {
     // Should find both variables
     const outer_result = symtab.lookup("outer");
     try std.testing.expect(outer_result != null);
-    try std.testing.expectEqualStrings("%var0", outer_result.?);
+    const outer_ssa = try outer_result.?.print(std.testing.allocator);
+    defer std.testing.allocator.free(outer_ssa);
+    try std.testing.expectEqualStrings("%var0", outer_ssa);
 
     const inner_result = symtab.lookup("inner");
     try std.testing.expect(inner_result != null);
-    try std.testing.expectEqualStrings("%var1", inner_result.?);
+    const inner_ssa = try inner_result.?.print(std.testing.allocator);
+    defer std.testing.allocator.free(inner_ssa);
+    try std.testing.expectEqualStrings("%var1", inner_ssa);
 }
 
 test "SymbolTable: inner scope shadows outer scope" {
@@ -128,7 +154,9 @@ test "SymbolTable: inner scope shadows outer scope" {
     // Lookup should find the inner definition
     const result = symtab.lookup("x");
     try std.testing.expect(result != null);
-    try std.testing.expectEqualStrings("%var1", result.?);
+    const inner_ssa = try result.?.print(std.testing.allocator);
+    defer std.testing.allocator.free(inner_ssa);
+    try std.testing.expectEqualStrings("%var1", inner_ssa);
 
     // Pop inner scope
     symtab.popScope();
@@ -136,7 +164,9 @@ test "SymbolTable: inner scope shadows outer scope" {
     // Now should find outer definition
     const outer_result = symtab.lookup("x");
     try std.testing.expect(outer_result != null);
-    try std.testing.expectEqualStrings("%var0", outer_result.?);
+    const outer_ssa = try outer_result.?.print(std.testing.allocator);
+    defer std.testing.allocator.free(outer_ssa);
+    try std.testing.expectEqualStrings("%var0", outer_ssa);
 }
 
 test "SymbolTable: variables not accessible after scope pop" {
@@ -165,15 +195,28 @@ test "SymbolTable: mixed function and global variables" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const global1 = try symtab.define("g1", .global);
-    const func1 = try symtab.define("f1", .function);
-    const global2 = try symtab.define("g2", .global);
-    const func2 = try symtab.define("f2", .function);
+    const temp1 = try symtab.define("g1", .global);
+    const temp2 = try symtab.define("f1", .function);
+    const temp3 = try symtab.define("g2", .global);
+    const temp4 = try symtab.define("f2", .function);
 
-    try std.testing.expectEqualStrings("$var0", global1);
-    try std.testing.expectEqualStrings("%var1", func1);
-    try std.testing.expectEqualStrings("$var2", global2);
-    try std.testing.expectEqualStrings("%var3", func2);
+    const ssa1 = try temp1.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa1);
+    const ssa2 = try temp2.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa2);
+    const ssa3 = try temp3.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa3);
+    const ssa4 = try temp4.print(std.testing.allocator);
+    defer std.testing.allocator.free(ssa4);
+
+    try std.testing.expectEqualStrings("$var0", ssa1);
+    try std.testing.expectEqual(Sigil.global, temp1.sigil);
+    try std.testing.expectEqualStrings("%var1", ssa2);
+    try std.testing.expectEqual(Sigil.function, temp2.sigil);
+    try std.testing.expectEqualStrings("$var2", ssa3);
+    try std.testing.expectEqual(Sigil.global, temp3.sigil);
+    try std.testing.expectEqualStrings("%var3", ssa4);
+    try std.testing.expectEqual(Sigil.function, temp4.sigil);
 }
 
 test "SymbolTable: deeply nested scopes" {

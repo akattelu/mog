@@ -1,6 +1,8 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
 
+pub const Sigil = enum { function, global };
+
 /// Manages scopes and holds associations between variables and SSA temporaries
 pub const SymbolTable = struct {
     scopes: std.ArrayList(*Scope),
@@ -8,8 +10,7 @@ pub const SymbolTable = struct {
     alloc: Allocator,
 
     // Scope sub struct
-    const Scope = std.StringHashMap([]const u8);
-    const Sigil = enum { function, global };
+    const Scope = std.StringHashMap(*Temporary);
 
     /// Return a new empty symbol table
     pub fn init(alloc: Allocator) !SymbolTable {
@@ -42,8 +43,12 @@ pub const SymbolTable = struct {
             // Free all items
             var iter = last_scope.iterator();
             while (iter.next()) |entry| {
-                self.alloc.free(entry.key_ptr.*);
-                self.alloc.free(entry.value_ptr.*);
+                const var_name = entry.key_ptr.*;
+                const temp = entry.value_ptr.*;
+
+                self.alloc.free(var_name);
+                self.alloc.free(temp.name);
+                self.alloc.destroy(temp);
             }
             // Free the map itself
             last_scope.deinit();
@@ -53,24 +58,22 @@ pub const SymbolTable = struct {
     }
 
     /// Define a new variable in the latest scope
-    pub fn define(self: *SymbolTable, name: []const u8, sigil: Sigil) ![]const u8 {
+    pub fn define(self: *SymbolTable, name: []const u8, sigil: Sigil) !*Temporary {
         const last_scope = self.scopes.getLast();
-        const name_copy = try self.alloc.dupe(u8, name); // Make owned copy
-        const ssa_name = switch (sigil) {
-            .global => try std.fmt.allocPrint(self.alloc, "$var{d}", .{self.next_var_id}),
-            .function => try std.fmt.allocPrint(self.alloc, "%var{d}", .{self.next_var_id}),
-        };
 
-        // Increment variable number
-        self.next_var_id = self.next_var_id + 1;
-        try last_scope.put(name_copy, ssa_name);
+        // Copy name
+        const name_copy = try self.alloc.dupe(u8, name); // Make owned copy
+
+        // Create temp and add to map
+        const ssa_temporary = try self.createTemporary(sigil);
+        try last_scope.put(name_copy, ssa_temporary);
 
         // Return the name in case it needs to be used
-        return ssa_name;
+        return ssa_temporary;
     }
 
     /// Lookup a name to retrieve its ssa_name in the latest scope
-    pub fn lookup(self: *SymbolTable, name: []const u8) ?[]const u8 {
+    pub fn lookup(self: *SymbolTable, name: []const u8) ?*Temporary {
         // Look through all scopes in reverse order
         var i: usize = self.scopes.items.len;
         while (i > 0) {
@@ -82,5 +85,37 @@ pub const SymbolTable = struct {
         }
         // Searched all scopes and didn't find the item
         return null;
+    }
+
+    /// Create a new temporary and increment internal counter for temp names
+    /// Allocates using stored allocator
+    pub fn createTemporary(self: *SymbolTable, sigil: Sigil) !*Temporary {
+        const temp = try self.alloc.create(Temporary);
+        temp.* = .{ .name = try std.fmt.allocPrint(self.alloc, "var{d}", .{self.next_var_id}), .sigil = sigil };
+
+        // Increment variable number
+        self.next_var_id = self.next_var_id + 1;
+        return temp;
+    }
+};
+
+pub const Temporary = struct {
+    sigil: Sigil,
+    name: []const u8,
+
+    /// Print with allocator
+    pub fn print(self: *Temporary, alloc: Allocator) ![]const u8 {
+        return std.fmt.allocPrint(alloc, "{s}{s}", .{ switch (self.sigil) {
+            .function => "%",
+            .global => "$",
+        }, self.name });
+    }
+
+    /// Write with writer
+    pub fn write(self: *Temporary, writer: std.Io.Writer) !void {
+        try writer.print("{s}{s}", .{ switch (self.sigil) {
+            .function => "%",
+            .global => "$",
+        }, self.name });
     }
 };
