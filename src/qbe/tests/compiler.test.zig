@@ -36,7 +36,10 @@ fn compileToQBE(source: []const u8) ![]const u8 {
 /// Helper function to assert that IR output contains expected substrings
 fn expectIRContains(ir: []const u8, expected: []const []const u8) !void {
     for (expected) |substring| {
-        try std.testing.expect(std.mem.indexOf(u8, ir, substring) != null);
+        std.testing.expect(std.mem.indexOf(u8, ir, substring) != null) catch |err| {
+            std.debug.print("Expected {s} when comparing ir, instead found: {s}", .{ substring, ir });
+            return err;
+        };
     }
 }
 
@@ -103,6 +106,23 @@ test "compile float literals" {
         "%var0 =d copy d_3.14",
         "%var1 =d copy d_0",
         "%var2 =d copy d_123.456",
+        "ret",
+    });
+}
+
+test "compile string literals" {
+    const source =
+        \\"hello world"
+    ;
+
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
+
+    try expectIRContains(ir, &.{
+        "data $str_0 = { b \"hello world\", b 0 }",
+        "export function w $main()",
+        "@start",
+        "%var0 =w $str_0",
         "ret",
     });
 }

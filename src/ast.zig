@@ -651,6 +651,7 @@ pub const Expression = union(ExpressionTypes) {
         return switch (self.*) {
             .FunctionCall => |n| try n.compile(c),
             .Number => |n| try n.compile(c),
+            .String => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -899,13 +900,16 @@ pub const FunctionCallExpression = struct {
                         const string_data_ref = try c.data.addString(s.value);
 
                         // Add instruction
-                        const vname = try c.current_function.current_block.?.getTemporaryVariableName();
-                        defer c.alloc.free(vname);
-
-                        const call_instr = try std.fmt.allocPrint(c.alloc, "call {s}(l ${s})", .{ cbuiltin.name, string_data_ref });
+                        const call_instr = try std.fmt.allocPrint(c.alloc, "call {s}(l {s})", .{ cbuiltin.name, string_data_ref });
                         defer c.alloc.free(call_instr);
 
                         const tmp = try c.addInstruction(.function, .w, call_instr);
+                        return tmp;
+                    },
+
+                    .ExpressionList => |el| {
+                        _ = el;
+                        const tmp = try c.addInstruction(.function, .w, "");
                         return tmp;
                     },
 
@@ -1135,6 +1139,16 @@ pub const StringLiteral = struct {
     /// Pretty prints the string literal
     pub fn pretty(self: *const StringLiteral, pp: *PrettyPrinter) Writer.Error!void {
         try pp.print("\"{s}\"", .{self.value});
+    }
+
+    /// Compile by adding string to data section and assigning local
+    pub fn compile(self: *const StringLiteral, c: *Compiler) !*Temporary {
+        const str_name = try c.data.addString(self.value);
+        return c.addInstruction(
+            .function,
+            .w,
+            str_name,
+        );
     }
 };
 

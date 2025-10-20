@@ -21,7 +21,7 @@ const DataDefinition = struct {
         switch (self.value) {
             .string => |val| {
                 try writer.print(
-                    \\data ${s} = {{ b "{s}", b 0 }}
+                    \\data {s} = {{ b "{s}", b 0 }}
                 , .{ self.name, val });
             },
         }
@@ -78,7 +78,7 @@ pub const Data = struct {
         // Get idx from linked list length
         const idx: u32 = @intCast(self.items.len());
 
-        const name = try std.fmt.allocPrint(self.alloc, "str_{d}", .{idx});
+        const name = try std.fmt.allocPrint(self.alloc, "$str_{d}", .{idx});
         errdefer self.alloc.free(name);
 
         const owned_value = try self.alloc.dupe(u8, s);
