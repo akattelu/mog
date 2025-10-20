@@ -68,3 +68,41 @@ test "add instruction helper" {
     try std.testing.expectEqual(temp.sigil, .function);
     try std.testing.expectEqualStrings(temp.name, "var0");
 }
+
+test "compile integer literals" {
+    const source =
+        \\0
+        \\42
+        \\9999999
+    ;
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
+
+    try expectIRContains(ir, &.{
+        "export function w $main()",
+        "@start",
+        "%var0 =l copy 0",
+        "%var1 =l copy 42",
+        "%var2 =l copy 9999999",
+        "ret",
+    });
+}
+
+test "compile float literals" {
+    const source =
+        \\3.14
+        \\0.0
+        \\123.456
+    ;
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
+
+    try expectIRContains(ir, &.{
+        "export function w $main()",
+        "@start",
+        "%var0 =d copy d_3.14",
+        "%var1 =d copy d_0",
+        "%var2 =d copy d_123.456",
+        "ret",
+    });
+}
