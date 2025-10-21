@@ -721,7 +721,25 @@ pub const InfixExpression = struct {
     right: *Expression,
 
     const operator_map = std.StaticStringMap([]const u8).initComptime(.{
+        // Arithmetic operators
         .{ "+", "add" },
+        .{ "-", "sub" },
+        .{ "*", "mul" },
+        .{ "/", "div" },
+        .{ "%", "rem" },
+        // Bitwise operators
+        .{ "&", "and" },
+        .{ "|", "or" },
+        .{ "~", "xor" },
+        .{ "<<", "shl" },
+        .{ ">>", "sar" }, // Using arithmetic right shift (sar) for signed integers
+        // Comparison operators
+        .{ "==", "ceq" },
+        .{ "~=", "cne" },
+        .{ "<", "cslt" },
+        .{ ">", "csgt" },
+        .{ "<=", "csle" },
+        .{ ">=", "csge" },
     });
 
     /// Returns the literal text of the operator token.

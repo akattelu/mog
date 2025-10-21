@@ -149,16 +149,62 @@ test "compile builtin call with expression list" {
 }
 
 test "compile infix expressions" {
-    const source =
-        \\2 + 5
-    ;
+    const TestCase = struct {
+        source: []const u8,
+        lhs: []const u8,
+        rhs: []const u8,
+        instruction: []const u8,
+    };
 
-    const ir = try compileToQBE(source);
-    defer alloc.free(ir);
+    const test_cases = [_]TestCase{
+        // Arithmetic operators
+        .{ .source = "2 + 5", .lhs = "2", .rhs = "5", .instruction = "add" },
+        .{ .source = "10 - 3", .lhs = "10", .rhs = "3", .instruction = "sub" },
+        .{ .source = "4 * 7", .lhs = "4", .rhs = "7", .instruction = "mul" },
+        .{ .source = "20 / 5", .lhs = "20", .rhs = "5", .instruction = "div" },
+        .{ .source = "17 % 5", .lhs = "17", .rhs = "5", .instruction = "rem" },
 
-    try expectIRContains(ir, &.{
-        "%var0 =l copy 2",
-        "%var1 =l copy 5",
-        "%var2 =l add %var0, %var1",
-    });
+        // Bitwise operators
+        .{ .source = "12 & 7", .lhs = "12", .rhs = "7", .instruction = "and" },
+        .{ .source = "8 | 4", .lhs = "8", .rhs = "4", .instruction = "or" },
+        .{ .source = "15 ~ 3", .lhs = "15", .rhs = "3", .instruction = "xor" },
+        .{ .source = "5 << 2", .lhs = "5", .rhs = "2", .instruction = "shl" },
+        .{ .source = "20 >> 2", .lhs = "20", .rhs = "2", .instruction = "sar" },
+
+        // Comparison operators
+        .{ .source = "5 == 5", .lhs = "5", .rhs = "5", .instruction = "ceq" },
+        .{ .source = "5 ~= 3", .lhs = "5", .rhs = "3", .instruction = "cne" },
+        .{ .source = "3 < 7", .lhs = "3", .rhs = "7", .instruction = "cslt" },
+        .{ .source = "10 > 5", .lhs = "10", .rhs = "5", .instruction = "csgt" },
+        .{ .source = "5 <= 5", .lhs = "5", .rhs = "5", .instruction = "csle" },
+        .{ .source = "7 >= 3", .lhs = "7", .rhs = "3", .instruction = "csge" },
+    };
+
+    for (test_cases) |tc| {
+        const ir = try compileToQBE(tc.source);
+        defer alloc.free(ir);
+
+        const expected_lhs = try std.fmt.allocPrint(alloc, "%var0 =l copy {s}", .{tc.lhs});
+        defer alloc.free(expected_lhs);
+        const expected_rhs = try std.fmt.allocPrint(alloc, "%var1 =l copy {s}", .{tc.rhs});
+        defer alloc.free(expected_rhs);
+        const expected_instr = try std.fmt.allocPrint(alloc, "%var2 =l {s} %var0, %var1", .{tc.instruction});
+        defer alloc.free(expected_instr);
+
+        try expectIRContains(ir, &.{ expected_lhs, expected_rhs, expected_instr });
+    }
+
+    // Test nested expressions separately
+    {
+        const source = "(2 + 3) * 4";
+        const ir = try compileToQBE(source);
+        defer alloc.free(ir);
+        try expectIRContains(ir, &.{
+            "%var0 =l copy 2",
+            "%var1 =l copy 3",
+            "%var2 =l add %var0, %var1",
+            "%var3 =l copy 4",
+            "%var4 =l mul %var2, %var3",
+        });
+    }
 }
