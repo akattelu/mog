@@ -3,6 +3,7 @@ const alloc = std.testing.allocator;
 const Lexer = @import("../../lexer.zig").Lexer;
 const Parser = @import("../../parser.zig").Parser;
 const QBECompiler = @import("../compiler.zig").QBECompiler;
+const Type = @import("../function.zig").Type;
 
 /// Helper function to compile source code to QBE IR
 /// Caller must free the returned string with allocator
@@ -154,41 +155,49 @@ test "compile infix expressions" {
         lhs: []const u8,
         rhs: []const u8,
         instruction: []const u8,
+        type: Type,
     };
 
     const test_cases = [_]TestCase{
         // Arithmetic operators
-        .{ .source = "2 + 5", .lhs = "2", .rhs = "5", .instruction = "add" },
-        .{ .source = "10 - 3", .lhs = "10", .rhs = "3", .instruction = "sub" },
-        .{ .source = "4 * 7", .lhs = "4", .rhs = "7", .instruction = "mul" },
-        .{ .source = "20 / 5", .lhs = "20", .rhs = "5", .instruction = "div" },
-        .{ .source = "17 % 5", .lhs = "17", .rhs = "5", .instruction = "rem" },
+        .{
+            .type = .l,
+            .source = "2 + 5",
+            .lhs = "2",
+            .rhs = "5",
+            .instruction = "add",
+        },
+        .{ .type = .l, .source = "10 - 3", .lhs = "10", .rhs = "3", .instruction = "sub" },
+        .{ .type = .l, .source = "4 * 7", .lhs = "4", .rhs = "7", .instruction = "mul" },
+        .{ .type = .l, .source = "20 / 5", .lhs = "20", .rhs = "5", .instruction = "div" },
+        .{ .type = .l, .source = "17 % 5", .lhs = "17", .rhs = "5", .instruction = "rem" },
 
         // Bitwise operators
-        .{ .source = "12 & 7", .lhs = "12", .rhs = "7", .instruction = "and" },
-        .{ .source = "8 | 4", .lhs = "8", .rhs = "4", .instruction = "or" },
-        .{ .source = "15 ~ 3", .lhs = "15", .rhs = "3", .instruction = "xor" },
-        .{ .source = "5 << 2", .lhs = "5", .rhs = "2", .instruction = "shl" },
-        .{ .source = "20 >> 2", .lhs = "20", .rhs = "2", .instruction = "sar" },
+        .{ .type = .l, .source = "12 & 7", .lhs = "12", .rhs = "7", .instruction = "and" },
+        .{ .type = .l, .source = "8 | 4", .lhs = "8", .rhs = "4", .instruction = "or" },
+        .{ .type = .l, .source = "15 ~ 3", .lhs = "15", .rhs = "3", .instruction = "xor" },
+        .{ .type = .l, .source = "5 << 2", .lhs = "5", .rhs = "2", .instruction = "shl" },
+        .{ .type = .l, .source = "20 >> 2", .lhs = "20", .rhs = "2", .instruction = "sar" },
 
         // Comparison operators
-        .{ .source = "5 == 5", .lhs = "5", .rhs = "5", .instruction = "ceq" },
-        .{ .source = "5 ~= 3", .lhs = "5", .rhs = "3", .instruction = "cne" },
-        .{ .source = "3 < 7", .lhs = "3", .rhs = "7", .instruction = "cslt" },
-        .{ .source = "10 > 5", .lhs = "10", .rhs = "5", .instruction = "csgt" },
-        .{ .source = "5 <= 5", .lhs = "5", .rhs = "5", .instruction = "csle" },
-        .{ .source = "7 >= 3", .lhs = "7", .rhs = "3", .instruction = "csge" },
+        .{ .type = .l, .source = "5 == 5", .lhs = "5", .rhs = "5", .instruction = "ceql" },
+        .{ .type = .d, .source = "5.5 == 5.5", .lhs = "5.5", .rhs = "5.5", .instruction = "ceqd" },
+        .{ .type = .l, .source = "5 ~= 3", .lhs = "5", .rhs = "3", .instruction = "cnel" },
+        .{ .type = .l, .source = "3 < 7", .lhs = "3", .rhs = "7", .instruction = "csltl" },
+        .{ .type = .l, .source = "10 > 5", .lhs = "10", .rhs = "5", .instruction = "csgtl" },
+        .{ .type = .l, .source = "5 <= 5", .lhs = "5", .rhs = "5", .instruction = "cslel" },
+        .{ .type = .l, .source = "7 >= 3", .lhs = "7", .rhs = "3", .instruction = "csgel" },
     };
 
     for (test_cases) |tc| {
         const ir = try compileToQBE(tc.source);
         defer alloc.free(ir);
 
-        const expected_lhs = try std.fmt.allocPrint(alloc, "%var0 =l copy {s}", .{tc.lhs});
+        const expected_lhs = try std.fmt.allocPrint(alloc, "%var0 ={s} copy {s}{s}", .{ @tagName(tc.type), if (tc.type == .d) "d_" else "", tc.lhs });
         defer alloc.free(expected_lhs);
-        const expected_rhs = try std.fmt.allocPrint(alloc, "%var1 =l copy {s}", .{tc.rhs});
+        const expected_rhs = try std.fmt.allocPrint(alloc, "%var1 ={s} copy {s}{s}", .{ @tagName(tc.type), if (tc.type == .d) "d_" else "", tc.rhs });
         defer alloc.free(expected_rhs);
-        const expected_instr = try std.fmt.allocPrint(alloc, "%var2 =l {s} %var0, %var1", .{tc.instruction});
+        const expected_instr = try std.fmt.allocPrint(alloc, "%var2 ={s} {s} %var0, %var1", .{ @tagName(tc.type), tc.instruction });
         defer alloc.free(expected_instr);
 
         try expectIRContains(ir, &.{ expected_lhs, expected_rhs, expected_instr });

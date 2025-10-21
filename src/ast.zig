@@ -733,6 +733,9 @@ pub const InfixExpression = struct {
         .{ "~", "xor" },
         .{ "<<", "shl" },
         .{ ">>", "sar" }, // Using arithmetic right shift (sar) for signed integers
+    });
+
+    const comparison_map = std.StaticStringMap([]const u8).initComptime(.{
         // Comparison operators
         .{ "==", "ceq" },
         .{ "~=", "cne" },
@@ -788,7 +791,8 @@ pub const InfixExpression = struct {
 
         // Get operator from map
         const operator_instruction = operator_map.get(self.operator);
-        if (operator_instruction == null) {
+        const comparison_instruction = comparison_map.get(self.operator);
+        if (operator_instruction == null and comparison_instruction == null) {
             return CompileError.Invalid;
         }
 
@@ -799,9 +803,17 @@ pub const InfixExpression = struct {
         defer c.alloc.free(rhs_var_name);
 
         // Format and add instruction
-        const result_instr = try std.fmt.allocPrint(c.alloc, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
-        defer c.alloc.free(result_instr);
-        return try c.addInstruction(.function, result_type, result_instr);
+        if (comparison_instruction != null) {
+            // handle comparison instruction by appending result type to instr name
+            const result_instr = try std.fmt.allocPrint(c.alloc, "{s}{s} {s}, {s}", .{ comparison_instruction.?, @tagName(result_type), lhs_var_name, rhs_var_name });
+            defer c.alloc.free(result_instr);
+            return try c.addInstruction(.function, result_type, result_instr);
+        } else {
+            // must be arithmetic / logical operator
+            const result_instr = try std.fmt.allocPrint(c.alloc, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
+            defer c.alloc.free(result_instr);
+            return try c.addInstruction(.function, result_type, result_instr);
+        }
     }
 };
 
