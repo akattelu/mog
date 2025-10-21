@@ -147,3 +147,18 @@ test "compile builtin call with expression list" {
         "ret",
     });
 }
+
+test "compile infix expressions" {
+    const source =
+        \\2 + 5
+    ;
+
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
+
+    try expectIRContains(ir, &.{
+        "%var0 =l copy 2",
+        "%var1 =l copy 5",
+        "%var2 =l add %var0, %var1",
+    });
+}

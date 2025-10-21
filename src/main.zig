@@ -14,7 +14,7 @@ pub const token = @import("token.zig");
 const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
 const QBECompiler = @import("qbe/compiler.zig").QBECompiler;
 
-const CommandErrUnion = (std.mem.Allocator.Error || std.Io.Writer.Error || Lexer.LexError || ParserError || std.fmt.ParseIntError || std.fs.File.OpenError || std.Io.Reader.Error);
+const CommandErrUnion = (std.mem.Allocator.Error || std.Io.Writer.Error || Lexer.LexError || ParserError || std.fmt.ParseIntError || std.fs.File.OpenError || std.Io.Reader.Error || ast.CompileError);
 const Command = *const fn (args: *std.process.ArgIterator) CommandErrUnion!u8;
 const command_map = std.StaticStringMap(Command).initComptime(.{
     .{ "repl", &repl },

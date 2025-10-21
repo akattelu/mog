@@ -4,8 +4,9 @@ const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
 const qbe = @import("qbe/compiler.zig");
 const Compiler = qbe.QBECompiler;
 const Temporary = @import("qbe/symbol_table.zig").Temporary;
+const Type = @import("qbe/function.zig").Type;
 const Writer = std.Io.Writer;
-const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error;
+pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || error{Invalid};
 const testing = std.testing;
 
 /// The different types of statements in the AST.
@@ -652,6 +653,7 @@ pub const Expression = union(ExpressionTypes) {
             .FunctionCall => |n| try n.compile(c),
             .Number => |n| try n.compile(c),
             .String => |n| try n.compile(c),
+            .Infix => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -718,6 +720,10 @@ pub const InfixExpression = struct {
     /// The right-hand operand
     right: *Expression,
 
+    const operator_map = std.StaticStringMap([]const u8).initComptime(.{
+        .{ "+", "add" },
+    });
+
     /// Returns the literal text of the operator token.
     pub fn tokenLiteral(self: *const InfixExpression) []const u8 {
         return self.token.literal;
@@ -744,6 +750,40 @@ pub const InfixExpression = struct {
         try pp.write(" ");
         try self.right.pretty(pp);
         try pp.write(")");
+    }
+
+    /// Compile lhs and rhs, use operator, and assign
+    pub fn compile(self: *const InfixExpression, c: *Compiler) !*Temporary {
+        // Compile left and right
+        const lhs_temp = try self.left.compile(c);
+        const rhs_temp = try self.right.compile(c);
+
+        // Calculate result type
+        var result_type: Type = .l;
+        if (lhs_temp.datatype == .d and rhs_temp.datatype == .d) {
+            // TODO: handle more cases
+            result_type = .d;
+        }
+        if (lhs_temp.datatype != rhs_temp.datatype) {
+            return CompileError.Invalid;
+        }
+
+        // Get operator from map
+        const operator_instruction = operator_map.get(self.operator);
+        if (operator_instruction == null) {
+            return CompileError.Invalid;
+        }
+
+        // Compute variable strings and defer free for expressions
+        const lhs_var_name = try lhs_temp.print(c.alloc);
+        const rhs_var_name = try rhs_temp.print(c.alloc);
+        defer c.alloc.free(lhs_var_name);
+        defer c.alloc.free(rhs_var_name);
+
+        // Format and add instruction
+        const result_instr = try std.fmt.allocPrint(c.alloc, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
+        defer c.alloc.free(result_instr);
+        return try c.addInstruction(.function, result_type, result_instr);
     }
 };
 
