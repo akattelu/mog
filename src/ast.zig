@@ -5,7 +5,7 @@ const qbe = @import("qbe/compiler.zig");
 const Compiler = qbe.QBECompiler;
 const Temporary = @import("qbe/symbol_table.zig").Temporary;
 const Writer = std.Io.Writer;
-const AllocatorError = std.mem.Allocator.Error;
+const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error;
 const testing = std.testing;
 
 /// The different types of statements in the AST.
@@ -647,7 +647,7 @@ pub const Expression = union(ExpressionTypes) {
     }
 
     /// Emit IR with Compiler
-    pub fn compile(self: *const Expression, c: *Compiler) !*Temporary {
+    pub fn compile(self: *const Expression, c: *Compiler) CompileError!*Temporary {
         return switch (self.*) {
             .FunctionCall => |n| try n.compile(c),
             .Number => |n| try n.compile(c),
@@ -907,10 +907,28 @@ pub const FunctionCallExpression = struct {
                         return tmp;
                     },
 
-                    .ExpressionList => |el| {
-                        _ = el;
-                        const tmp = try c.addInstruction(.function, .w, "");
-                        return tmp;
+                    .ExpressionList => |expr_list| {
+                        var writer = std.Io.Writer.Allocating.init(c.alloc);
+                        defer writer.deinit();
+
+                        // Write fn name and first paren
+                        try writer.writer.print("call {s}(", .{cbuiltin.name});
+                        for (expr_list.items, 0..) |expr, i| {
+                            const result_temp = try expr.compile(c);
+                            try writer.writer.writeAll(@tagName(result_temp.datatype));
+                            try writer.writer.writeAll(" ");
+                            try result_temp.write(&writer.writer);
+                            if (i == 0 and std.mem.eql(u8, cbuiltin.name, "$printf")) {
+                                // Use variadic arguments for specific functions because
+                                // TODO: Somehow decide which of these should have this and which shouldn't
+                                try writer.writer.writeAll(", ...");
+                            }
+                            if (i != (expr_list.items.len - 1)) {
+                                try writer.writer.writeAll(", ");
+                            }
+                        }
+                        try writer.writer.writeAll(")");
+                        return try c.addInstruction(.function, .w, writer.written());
                     },
 
                     else => unreachable,
@@ -1144,10 +1162,12 @@ pub const StringLiteral = struct {
     /// Compile by adding string to data section and assigning local
     pub fn compile(self: *const StringLiteral, c: *Compiler) !*Temporary {
         const str_name = try c.data.addString(self.value);
+        const instr = try std.fmt.allocPrint(c.alloc, "copy {s}", .{str_name});
+        defer c.alloc.free(instr);
         return c.addInstruction(
             .function,
-            .w,
-            str_name,
+            .l,
+            instr,
         );
     }
 };

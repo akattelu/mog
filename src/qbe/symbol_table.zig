@@ -122,7 +122,7 @@ pub const Temporary = struct {
     }
 
     /// Write with writer
-    pub fn write(self: *Temporary, writer: std.Io.Writer) !void {
+    pub fn write(self: *Temporary, writer: *std.Io.Writer) !void {
         try writer.print("{s}{s}", .{ switch (self.sigil) {
             .function => "%",
             .global => "$",

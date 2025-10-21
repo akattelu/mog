@@ -122,7 +122,28 @@ test "compile string literals" {
         "data $str_0 = { b \"hello world\", b 0 }",
         "export function w $main()",
         "@start",
-        "%var0 =w $str_0",
+        "%var0 =l copy $str_0",
+        "ret",
+    });
+}
+
+test "compile builtin call with expression list" {
+    const source =
+        \\$printf("%s %ld", "hello", 2)
+    ;
+
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
+
+    try expectIRContains(ir, &.{
+        "data $str_0 = { b \"%s %ld\", b 0 }",
+        "data $str_1 = { b \"hello\", b 0 }",
+        "export function w $main()",
+        "@start",
+        "%var0 =l copy $str_0",
+        "%var1 =l copy $str_1",
+        "%var2 =l copy 2",
+        "%var3 =w call $printf(l %var0, ..., l %var1, l %var2)",
         "ret",
     });
 }
