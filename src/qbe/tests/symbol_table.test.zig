@@ -1,6 +1,7 @@
 const std = @import("std");
 const SymbolTable = @import("../symbol_table.zig").SymbolTable;
 const Sigil = @import("../symbol_table.zig").Sigil;
+const Type = @import("../function.zig").Type;
 
 test "SymbolTable: init creates table with one scope" {
     var symtab = try SymbolTable.init(std.testing.allocator);
@@ -14,7 +15,7 @@ test "SymbolTable: define with function sigil creates correct SSA name" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const temp = try symtab.define("foo", .function);
+    const temp = try symtab.define("foo", .function, .w);
 
     try std.testing.expectEqualStrings("var0", temp.name);
     try std.testing.expectEqual(Sigil.function, temp.sigil);
@@ -30,7 +31,7 @@ test "SymbolTable: define with global sigil creates correct SSA name" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const temp = try symtab.define("bar", .global);
+    const temp = try symtab.define("bar", .global, .w);
 
     try std.testing.expectEqualStrings("var0", temp.name);
     try std.testing.expectEqual(Sigil.global, temp.sigil);
@@ -46,9 +47,9 @@ test "SymbolTable: define increments var_id sequentially" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const temp1 = try symtab.define("x", .function);
-    const temp2 = try symtab.define("y", .function);
-    const temp3 = try symtab.define("z", .global);
+    const temp1 = try symtab.define("x", .function, .w);
+    const temp2 = try symtab.define("y", .function, .w);
+    const temp3 = try symtab.define("z", .global, .w);
 
     const ssa1 = try temp1.print(std.testing.allocator);
     defer std.testing.allocator.free(ssa1);
@@ -67,7 +68,7 @@ test "SymbolTable: lookup finds variable in current scope" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    _ = try symtab.define("foo", .function);
+    _ = try symtab.define("foo", .function, .w);
 
     const result = symtab.lookup("foo");
     try std.testing.expect(result != null);
@@ -116,13 +117,13 @@ test "SymbolTable: lookup searches through nested scopes" {
     defer symtab.deinit();
 
     // Define in outer scope
-    _ = try symtab.define("outer", .function);
+    _ = try symtab.define("outer", .function, .w);
 
     // Push new scope
     try symtab.pushScope();
 
     // Define in inner scope
-    _ = try symtab.define("inner", .function);
+    _ = try symtab.define("inner", .function, .w);
 
     // Should find both variables
     const outer_result = symtab.lookup("outer");
@@ -143,13 +144,13 @@ test "SymbolTable: inner scope shadows outer scope" {
     defer symtab.deinit();
 
     // Define "x" in outer scope
-    _ = try symtab.define("x", .function);
+    _ = try symtab.define("x", .function, .w);
 
     // Push new scope
     try symtab.pushScope();
 
     // Define "x" again in inner scope
-    _ = try symtab.define("x", .function);
+    _ = try symtab.define("x", .function, .w);
 
     // Lookup should find the inner definition
     const result = symtab.lookup("x");
@@ -177,7 +178,7 @@ test "SymbolTable: variables not accessible after scope pop" {
     try symtab.pushScope();
 
     // Define variable in inner scope
-    _ = try symtab.define("temp", .function);
+    _ = try symtab.define("temp", .function, .w);
 
     // Should be found
     var result = symtab.lookup("temp");
@@ -195,10 +196,10 @@ test "SymbolTable: mixed function and global variables" {
     var symtab = try SymbolTable.init(std.testing.allocator);
     defer symtab.deinit();
 
-    const temp1 = try symtab.define("g1", .global);
-    const temp2 = try symtab.define("f1", .function);
-    const temp3 = try symtab.define("g2", .global);
-    const temp4 = try symtab.define("f2", .function);
+    const temp1 = try symtab.define("g1", .global, .w);
+    const temp2 = try symtab.define("f1", .function, .w);
+    const temp3 = try symtab.define("g2", .global, .w);
+    const temp4 = try symtab.define("f2", .function, .w);
 
     const ssa1 = try temp1.print(std.testing.allocator);
     defer std.testing.allocator.free(ssa1);
@@ -229,7 +230,7 @@ test "SymbolTable: deeply nested scopes" {
         try symtab.pushScope();
         const var_name = try std.fmt.allocPrint(std.testing.allocator, "var{d}", .{i});
         defer std.testing.allocator.free(var_name);
-        _ = try symtab.define(var_name, .function);
+        _ = try symtab.define(var_name, .function, .w);
     }
 
     try std.testing.expectEqual(@as(usize, 6), symtab.scopes.items.len);

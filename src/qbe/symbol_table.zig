@@ -1,5 +1,6 @@
 const std = @import("std");
 const Allocator = std.mem.Allocator;
+const Type = @import("function.zig").Type;
 
 pub const Sigil = enum { function, global };
 
@@ -64,14 +65,14 @@ pub const SymbolTable = struct {
     }
 
     /// Define a new variable in the latest scope
-    pub fn define(self: *SymbolTable, name: []const u8, sigil: Sigil) !*Temporary {
+    pub fn define(self: *SymbolTable, name: []const u8, sigil: Sigil, datatype: Type) !*Temporary {
         const last_scope = self.scopes.getLast();
 
         // Copy name
         const name_copy = try self.alloc.dupe(u8, name); // Make owned copy
 
         // Create temp and add to map
-        const ssa_temporary = try self.createTemporary(sigil);
+        const ssa_temporary = try self.createTemporary(sigil, datatype);
         try last_scope.put(name_copy, ssa_temporary);
 
         // Return the name in case it needs to be used
@@ -95,9 +96,9 @@ pub const SymbolTable = struct {
 
     /// Create a new temporary and increment internal counter for temp names
     /// Allocates using stored allocator
-    pub fn createTemporary(self: *SymbolTable, sigil: Sigil) !*Temporary {
+    pub fn createTemporary(self: *SymbolTable, sigil: Sigil, datatype: Type) !*Temporary {
         const temp = try self.alloc.create(Temporary);
-        temp.* = .{ .name = try std.fmt.allocPrint(self.alloc, "var{d}", .{self.next_var_id}), .sigil = sigil };
+        temp.* = .{ .name = try std.fmt.allocPrint(self.alloc, "var{d}", .{self.next_var_id}), .sigil = sigil, .datatype = datatype };
         try self.temporaries.append(self.alloc, temp);
 
         // Increment variable number
@@ -110,6 +111,7 @@ pub const SymbolTable = struct {
 pub const Temporary = struct {
     sigil: Sigil,
     name: []const u8,
+    datatype: Type,
 
     /// Print with allocator
     pub fn print(self: *Temporary, alloc: Allocator) ![]const u8 {

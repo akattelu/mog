@@ -72,7 +72,7 @@ pub const QBECompiler = struct {
 
     /// Add a structured instruction to the current function current block state
     pub fn addInstruction(self: *QBECompiler, sigil: Sigil, datatype: function.Type, rhs: []const u8) !*Temporary {
-        const temp = try self.symbol_table.createTemporary(sigil);
+        const temp = try self.symbol_table.createTemporary(sigil, datatype);
         const instr = try std.fmt.allocPrint(self.alloc, "{s}{s} ={s} {s}", .{ switch (temp.sigil) {
             .function => "%",
             .global => "$",
