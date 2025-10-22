@@ -3,7 +3,9 @@ const token = @import("token.zig");
 const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
 const qbe = @import("qbe/compiler.zig");
 const Compiler = qbe.QBECompiler;
-const Temporary = @import("qbe/symbol_table.zig").Temporary;
+const symbol_table = @import("qbe/symbol_table.zig");
+const Temporary = symbol_table.Temporary;
+const Sigil = symbol_table.Sigil;
 const Type = @import("qbe/function.zig").Type;
 const Writer = std.Io.Writer;
 pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || error{Invalid};
@@ -163,10 +165,38 @@ pub const AssignmentStatement = struct {
         try self.expr.pretty(pp);
     }
 
-    // TODO
+    // Compile assignment statements
+    // Makes new defs in symbol table
     pub fn compile(self: *const AssignmentStatement, c: *Compiler) !void {
-        _ = self;
-        _ = c;
+        if (!self.is_local) {
+            // TODO: support globals via allocations later
+            unreachable;
+        }
+        // Compute RHS
+        // This should be an expr list in the future
+        const rhs_temp = try self.expr.compile(c);
+        const rhs_temp_var = try rhs_temp.print(c.alloc);
+        defer c.alloc.free(rhs_temp_var);
+
+        // Only supporting local assignment for now
+        const sigil: Sigil = .function;
+
+        // TODO: this needs to handle re-assignment of existing variables
+        for (self.names.names.items) |name| {
+            // Define association in symbol table
+            const lhs_temp = try c.symbol_table.define(name.value, sigil, rhs_temp.datatype);
+            var writer = std.Io.Writer.Allocating.init(c.alloc);
+            defer writer.deinit();
+
+            // Write new associated temp directly
+            try lhs_temp.write(&writer.writer);
+            try writer.writer.writeAll(" =");
+            try writer.writer.writeAll(@tagName(rhs_temp.datatype));
+            try writer.writer.writeAll(" copy ");
+            try rhs_temp.write(&writer.writer);
+
+            _ = try c.current_function.current_block.?.addInstruction(writer.written());
+        }
     }
 };
 
@@ -655,6 +685,7 @@ pub const Expression = union(ExpressionTypes) {
             .String => |n| try n.compile(c),
             .Infix => |n| try n.compile(c),
             .Prefix => |n| try n.compile(c),
+            .Identifier => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -682,6 +713,11 @@ pub const Identifier = struct {
     pub fn pretty(self: *const Identifier, pp: *PrettyPrinter) Writer.Error!void {
         // instead of write() and print() to keep expressions on single lines without adding indentation
         try pp.write(self.value);
+    }
+
+    // Compile identifier by lookup in symtab
+    pub fn compile(self: *const Identifier, c: *Compiler) !*Temporary {
+        return c.symbol_table.lookup(self.value) orelse return CompileError.Invalid;
     }
 };
 

@@ -238,3 +238,19 @@ test "compile prefix expressions" {
         try expectIRContains(ir, &.{tc.instruction});
     }
 }
+
+test "compile assignment statement and identifier access" {
+    const source =
+        \\local x = 2
+        \\local y = 4
+        \\2 + x
+        \\y
+    ;
+
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
+
+    try expectIRContains(ir, &.{ "%var0 =l copy 2", "%var1 =l copy %var0", "%var2 =l copy 4", "%var3 =l copy %var2", "%var4 =l copy 2", "%var5 =l add %var4, %var1" });
+}
+
+test "compile identifier evaluations" {}
