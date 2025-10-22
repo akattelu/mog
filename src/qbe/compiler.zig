@@ -83,4 +83,14 @@ pub const QBECompiler = struct {
         // Return temp incase caller needs to use variable
         return temp;
     }
+
+    /// Add string instruction without creating a temporary or assignment
+    pub fn addInstructionWithoutLHS(self: *QBECompiler, rhs: []const u8) !void {
+        _ = try self.current_function.current_block.?.addInstruction(rhs);
+    }
+
+    /// Store current block and set current_block ptr
+    pub fn pushBlock(self: *QBECompiler, block: *function.Block) !void {
+        try self.current_function.putBlock(block);
+    }
 };

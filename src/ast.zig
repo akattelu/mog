@@ -686,6 +686,7 @@ pub const Expression = union(ExpressionTypes) {
             .Infix => |n| try n.compile(c),
             .Prefix => |n| try n.compile(c),
             .Identifier => |n| try n.compile(c),
+            .Conditional => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -1215,9 +1216,50 @@ pub const ConditionalExpression = struct {
     }
 
     // Compile different conditions expression, blocks, branches
-    pub fn compile(self: *const ConditionalExpression, c: *Compiler) !void {
-        _ = self;
-        _ = c;
+    // TODO: This doesn't yet handle conditional return values
+    pub fn compile(self: *const ConditionalExpression, c: *Compiler) !*Temporary {
+        // Compile condition
+        const condition_temp = try self.condition.compile(c);
+
+        const then_block = try c.functions.createBlock();
+        const else_block = try c.functions.createBlock();
+        const end_block = try c.functions.createBlock();
+
+        // Create "then" block jump instruction
+        const jnz_then_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, then_block.label, else_block.label });
+        defer c.alloc.free(jnz_then_str);
+        // Add jump instruction at end of then block
+        try c.addInstructionWithoutLHS(jnz_then_str);
+
+        // Compile then block
+        // Push new block so that compile adds statements into it
+        try c.symbol_table.pushScope();
+        try c.pushBlock(then_block);
+        try self.then_block.compileBlockWithoutRet(c);
+
+        // Create "end" block jump instruction at the end of "then" block
+        const jump_end_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{end_block.label});
+        defer c.alloc.free(jump_end_str);
+
+        // Add jump instruction at end of then block
+        try c.addInstructionWithoutLHS(jump_end_str);
+        c.symbol_table.popScope();
+
+        // Compile else block
+        // Always write an else block, but it'll be empty if the else_block doesn't exist
+        try c.symbol_table.pushScope();
+        try c.pushBlock(else_block);
+        if (self.else_block) |eb| {
+            try eb.compileBlockWithoutRet(c);
+        }
+        c.symbol_table.popScope();
+
+        // Create the end block and switch scope into it
+        try c.pushBlock(end_block);
+
+        // NOTE: For now since we aren't handling returned values
+        // Make a single copy 1 instruction to use as the returned temporary
+        return try c.addInstruction(.function, .l, "copy 1");
     }
 };
 
@@ -1774,6 +1816,13 @@ pub const Program = struct {
 
         if (!std.mem.eql(u8, c.current_function.current_block.?.instructions.getLast(), "ret")) {
             _ = try c.current_function.current_block.?.addInstruction("ret");
+        }
+    }
+
+    /// Emit IR for each statement but do not add `ret` instr at end of block;
+    pub fn compileBlockWithoutRet(self: *const Program, c: *Compiler) !void {
+        for (self.statements) |stmt| {
+            try stmt.compile(c);
         }
     }
 };

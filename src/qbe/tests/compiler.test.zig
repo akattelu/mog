@@ -59,6 +59,11 @@ test "compile simple puts statement" {
     });
 }
 
+test "create compiler" {
+    var qbe = try QBECompiler.init(alloc);
+    defer qbe.deinit();
+}
+
 test "add instruction helper" {
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();

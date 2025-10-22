@@ -92,6 +92,7 @@ pub const Function = struct {
         name: []const u8,
         return_type: ?Type,
         linkage: Linkage,
+        start_block: *Block,
     ) !Function {
         // Copy name
         const copied_name = try allocator.dupe(u8, name);
@@ -102,11 +103,10 @@ pub const Function = struct {
             .params = std.ArrayList(*Parameter).empty,
             .blocks = std.StringArrayHashMap(*Block).init(allocator),
             .allocator = allocator,
-            .current_block = null,
+            .current_block = start_block,
         };
         // every function starts with a @start block
-        const start_block = try func.createBlock("start");
-        func.current_block = start_block;
+        try func.putBlock(start_block);
         return func;
     }
 
@@ -118,13 +118,14 @@ pub const Function = struct {
             self.allocator.destroy(param);
         }
         self.params.deinit(self.allocator);
-        // Free blocks
-        var block_iter = self.blocks.iterator();
-        while (block_iter.next()) |entry| {
-            const block = entry.value_ptr.*;
-            block.deinit();
-            self.allocator.destroy(block);
+        // Deinit blocks struct
+        // Creation of blocks is not managed by this struct
+        // So do not free blocks, just free their names which are copied and used as keys
+        var iter = self.blocks.iterator();
+        while (iter.next()) |block| {
+            self.allocator.free(block.key_ptr.*);
         }
+
         self.blocks.deinit();
     }
 
@@ -135,21 +136,6 @@ pub const Function = struct {
 
         try self.params.append(self.allocator, param);
         return param;
-    }
-
-    /// Create a block and add it to this function's list of blocks
-    /// Returns a pointer to the created block
-    pub fn createBlock(self: *Function, label: []const u8) !*Block {
-        const block = try self.allocator.create(Block);
-        block.* = try Block.init(self.allocator, label);
-        try self.blocks.put(block.label, block);
-
-        return block;
-    }
-
-    /// Get a block by its label (returns null if not found)
-    pub fn getBlock(self: *Function, label: []const u8) ?*Block {
-        return self.blocks.getPtr(label);
     }
 
     /// Emit function to writer
@@ -189,6 +175,13 @@ pub const Function = struct {
         }
 
         try writer.print("}}\n", .{});
+    }
+
+    /// Add block to internal store
+    pub fn putBlock(self: *Function, block: *Block) !void {
+        const name_dupe = try self.allocator.dupe(u8, block.label);
+        try self.blocks.put(name_dupe, block);
+        self.current_block = block;
     }
 };
 
@@ -231,7 +224,10 @@ pub const FunctionSection = struct {
     pub fn addMainFunction(self: *FunctionSection) !*Function {
         // Add main function
         const main = try self.allocator.create(Function);
-        main.* = try Function.init(self.allocator, "main", .w, .@"export");
+        const start_block = try self.allocator.create(Block);
+        start_block.* = try Block.init(self.allocator, "start");
+        try self.blocks.append(self.allocator, start_block);
+        main.* = try Function.init(self.allocator, "main", .w, .@"export", start_block);
         try self.add(main);
         return main;
     }
