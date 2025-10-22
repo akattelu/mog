@@ -196,12 +196,16 @@ pub const Function = struct {
 pub const FunctionSection = struct {
     functions: std.ArrayList(*Function),
     allocator: Allocator,
+    current_block_idx: u32,
+    blocks: std.ArrayList(*Block),
 
     /// Create new function section
     pub fn init(allocator: Allocator) FunctionSection {
         return .{
             .functions = std.ArrayList(*Function).empty,
             .allocator = allocator,
+            .current_block_idx = 0,
+            .blocks = .empty,
         };
     }
 
@@ -211,6 +215,11 @@ pub const FunctionSection = struct {
             func.deinit();
             self.allocator.destroy(func);
         }
+        for (self.blocks.items) |block| {
+            block.deinit();
+            self.allocator.destroy(block);
+        }
+        self.blocks.deinit(self.allocator);
         self.functions.deinit(self.allocator);
     }
 
@@ -236,6 +245,22 @@ pub const FunctionSection = struct {
                 try writer.writeByte('\n');
             }
         }
+    }
+
+    /// Allocate and return a block
+    /// Does not add it to any functions in this section
+    /// Keeps track of all blocks
+    pub fn createBlock(self: *FunctionSection) !*Block {
+        // Create new label
+        const label = try std.fmt.allocPrint(self.allocator, "block{d}", .{self.current_block_idx});
+        self.current_block_idx += 1;
+        defer self.allocator.free(label);
+
+        // Create block
+        const block = try self.allocator.create(Block);
+        block.* = try Block.init(self.allocator, label);
+        try self.blocks.append(self.allocator, block);
+        return block;
     }
 };
 

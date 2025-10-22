@@ -1213,6 +1213,12 @@ pub const ConditionalExpression = struct {
         }
         try pp.write("end");
     }
+
+    // Compile different conditions expression, blocks, branches
+    pub fn compile(self: *const ConditionalExpression, c: *Compiler) !void {
+        _ = self;
+        _ = c;
+    }
 };
 
 /// A block is a collection of statements, just like a Program.

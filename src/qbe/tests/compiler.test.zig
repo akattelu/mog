@@ -252,5 +252,3 @@ test "compile assignment statement and identifier access" {
 
     try expectIRContains(ir, &.{ "%var0 =l copy 2", "%var1 =l copy %var0", "%var2 =l copy 4", "%var3 =l copy %var2", "%var4 =l copy 2", "%var5 =l add %var4, %var1" });
 }
-
-test "compile identifier evaluations" {}
