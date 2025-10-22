@@ -257,3 +257,109 @@ test "compile assignment statement and identifier access" {
 
     try expectIRContains(ir, &.{ "%var0 =l copy 2", "%var1 =l copy %var0", "%var2 =l copy 4", "%var3 =l copy %var2", "%var4 =l copy 2", "%var5 =l add %var4, %var1" });
 }
+
+test "compile conditional expressions" {
+    const TestCase = struct {
+        name: []const u8,
+        source: []const u8,
+        expected: []const []const u8,
+    };
+
+    const test_cases = [_]TestCase{
+        // If/then/else/end with truthy condition
+        .{
+            .name = "if/then/else/end with truthy condition",
+            .source =
+            \\local x = 1
+            \\if (x) then
+            \\  $puts("then block")
+            \\else
+            \\  $puts("else block")
+            \\end
+            ,
+            .expected = &.{
+                "%var0 =l copy 1",
+                "%var1 =l copy %var0",
+                "jnz %var1, @block0, @block1",
+                "@block0",
+                "%var2 =l copy $str_0",
+                "%var3 =w call $puts(l %var2)",
+                "jmp @block2",
+                "@block1",
+                "%var4 =l copy $str_1",
+                "%var5 =w call $puts(l %var4)",
+                "@block2",
+            },
+        },
+        // If/then/else/end with falsy condition
+        .{
+            .name = "if/then/else/end with falsy condition",
+            .source =
+            \\local y = 0
+            \\if (y) then
+            \\  $puts("should not run")
+            \\else
+            \\  $puts("should run")
+            \\end
+            ,
+            .expected = &.{
+                "%var0 =l copy 0",
+                "%var1 =l copy %var0",
+                "jnz %var1, @block0, @block1",
+                "@block0",
+                "@block1",
+                "@block2",
+            },
+        },
+        // If/then/end without else block
+        .{
+            .name = "if/then/end without else block",
+            .source =
+            \\local x = 1
+            \\if (x) then
+            \\  $puts("only then")
+            \\end
+            ,
+            .expected = &.{
+                "%var0 =l copy 1",
+                "%var1 =l copy %var0",
+                "jnz %var1, @block0, @block1",
+                "@block0",
+                "%var2 =l copy $str_0",
+                "%var3 =w call $puts(l %var2)",
+                "jmp @block2",
+                "@block1",
+                "@block2",
+            },
+        },
+        // Nested conditionals
+        .{
+            .name = "nested conditionals",
+            .source =
+            \\local x = 1
+            \\local y = 1
+            \\if (x) then
+            \\  if (y) then
+            \\    $puts("nested")
+            \\  end
+            \\end
+            ,
+            .expected = &.{
+                "jnz %var1, @block0, @block1",
+                "jnz %var3, @block3, @block4",
+                "jmp @block5",
+                "jmp @block2",
+            },
+        },
+    };
+
+    for (test_cases) |tc| {
+        const ir = try compileToQBE(tc.source);
+        defer alloc.free(ir);
+
+        expectIRContains(ir, tc.expected) catch |err| {
+            std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
+            return err;
+        };
+    }
+}

@@ -25,3 +25,13 @@ if (x) then
 	$puts("[PASS] Then block evaluates when condition is truthy")
 end
 $puts("[PASS] Returns control to end block thrice")
+$puts("")
+
+$puts("[TEST] If/Then/End Nested")
+if (x) then
+	if (y == 0) then
+		$puts("[PASS] Then block evaluates when both conditions are truthy")
+	end
+end
+$puts("[PASS] Returns control to end block thrice")
+$puts("")
