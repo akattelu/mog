@@ -654,6 +654,7 @@ pub const Expression = union(ExpressionTypes) {
             .Number => |n| try n.compile(c),
             .String => |n| try n.compile(c),
             .Infix => |n| try n.compile(c),
+            .Prefix => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -1054,6 +1055,8 @@ pub const PrefixExpression = struct {
     /// The expression the operator is applied to
     expression: *Expression,
 
+    const operator_map = std.StaticStringMap([]const u8).initComptime(.{ .{ "-", "neg" }, .{ "not", "xor" }, .{"~"} });
+
     /// Returns the literal text of the operator token.
     pub fn tokenLiteral(self: *const PrefixExpression) []const u8 {
         return self.token.literal;
@@ -1083,6 +1086,35 @@ pub const PrefixExpression = struct {
         }
         try self.expression.pretty(pp);
         try pp.write(")");
+    }
+
+    /// Compiles prefix expression
+    pub fn compile(self: *const PrefixExpression, c: *Compiler) !*Temporary {
+        // Compile target expression
+        const expr_temp = try self.expression.compile(c);
+        const expr_var_name = try expr_temp.print(c.alloc);
+        defer c.alloc.free(expr_var_name);
+
+        // Just checking all the cases here since theres only 4 and they all have significantly different behavior
+        if (std.mem.eql(u8, "-", self.operator)) {
+            const neg_instr = try std.fmt.allocPrint(c.alloc, "neg {s}", .{expr_var_name});
+            defer c.alloc.free(neg_instr);
+            return try c.addInstruction(.function, expr_temp.datatype, neg_instr);
+        } else if (std.mem.eql(u8, "not", self.operator)) {
+            const xor_instr = try std.fmt.allocPrint(c.alloc, "xor {s}, 1", .{expr_var_name});
+            defer c.alloc.free(xor_instr);
+            return try c.addInstruction(.function, expr_temp.datatype, xor_instr);
+        } else if (std.mem.eql(u8, "~", self.operator)) {
+            const not_expr = try std.fmt.allocPrint(c.alloc, "xor {s}, -1", .{expr_var_name});
+            defer c.alloc.free(not_expr);
+            return try c.addInstruction(.function, expr_temp.datatype, not_expr);
+        }
+        if (std.mem.eql(u8, "#", self.operator)) {
+            // TODO implement this for strings and tables
+            unreachable;
+        } else {
+            return CompileError.Invalid;
+        }
     }
 };
 

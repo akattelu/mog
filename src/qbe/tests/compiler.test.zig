@@ -217,3 +217,24 @@ test "compile infix expressions" {
         });
     }
 }
+
+test "compile prefix expressions" {
+    const TestCase = struct {
+        source: []const u8,
+        rhs: []const u8,
+        instruction: []const u8,
+    };
+
+    const test_cases = [_]TestCase{
+        .{ .source = "-3", .rhs = "3", .instruction = "=l neg %var0" },
+        .{ .source = "not 1", .rhs = "7", .instruction = "=l xor %var0, 1" },
+        .{ .source = "~10", .rhs = "5", .instruction = "=l xor %var0, -1" },
+    };
+
+    for (test_cases) |tc| {
+        const ir = try compileToQBE(tc.source);
+        defer alloc.free(ir);
+
+        try expectIRContains(ir, &.{tc.instruction});
+    }
+}
