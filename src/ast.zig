@@ -84,10 +84,13 @@ pub const Statement = union(StatementTypes) {
     }
 
     /// Emit IR with Compiler
-    pub fn compile(self: *const Statement, c: *Compiler) !void {
+    pub fn compile(self: *const Statement, c: *Compiler) CompileError!void {
         switch (self.*) {
             .Expression => |n| _ = try n.expr.compile(c),
             .Assignment => |n| try n.compile(c),
+            .Do => |n| try n.compile(c),
+            .While => |n| try n.compile(c),
+            .Repeat => |n| try n.compile(c),
             else => unreachable,
         }
     }
@@ -167,7 +170,7 @@ pub const AssignmentStatement = struct {
 
     // Compile assignment statements
     // Makes new defs in symbol table
-    pub fn compile(self: *const AssignmentStatement, c: *Compiler) !void {
+    pub fn compile(self: *const AssignmentStatement, c: *Compiler) CompileError!void {
         if (!self.is_local) {
             // TODO: support globals via allocations later
             unreachable;
@@ -336,6 +339,34 @@ pub const DoStatement = struct {
         }
         try pp.write("end");
     }
+
+    /// Compile do-end block
+    pub fn compile(self: *const DoStatement, c: *Compiler) CompileError!void {
+        // Create new block for do body
+        const do_block = try c.functions.createBlock();
+
+        // Jump to do block
+        const jmp_do_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{do_block.label});
+        defer c.alloc.free(jmp_do_str);
+        try c.addInstructionWithoutLHS(jmp_do_str);
+
+        // Compile do body with new scope
+        try c.symbol_table.pushScope();
+        try c.pushBlock(do_block);
+        try self.block.compileBlockWithoutRet(c);
+        c.symbol_table.popScope();
+
+        // Create continuation block
+        const continue_block = try c.functions.createBlock();
+
+        // Jump to continuation
+        const jmp_continue_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{continue_block.label});
+        defer c.alloc.free(jmp_continue_str);
+        try c.addInstructionWithoutLHS(jmp_continue_str);
+
+        // Switch to continuation block
+        try c.pushBlock(continue_block);
+    }
 };
 
 /// Represents a while loop statement.
@@ -379,6 +410,45 @@ pub const WhileStatement = struct {
         }
         try pp.write("end");
     }
+
+    /// Compile while loop
+    pub fn compile(self: *const WhileStatement, c: *Compiler) CompileError!void {
+        // Create blocks for while loop structure
+        const condition_recheck_block = try c.functions.createBlock();
+        const body_block = try c.functions.createBlock();
+        const exit_block = try c.functions.createBlock();
+
+        // First evaluation: compile condition inline (no extra jump)
+        const condition_temp = try self.condition.compile(c);
+
+        // Branch based on initial condition
+        const jnz_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, body_block.label, exit_block.label });
+        defer c.alloc.free(jnz_str);
+        try c.addInstructionWithoutLHS(jnz_str);
+
+        // Compile body with new scope
+        try c.symbol_table.pushScope();
+        try c.pushBlock(body_block);
+        try self.block.compileBlockWithoutRet(c);
+        c.symbol_table.popScope();
+
+        // Jump to condition re-check block (for next iteration)
+        const jmp_recheck_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{condition_recheck_block.label});
+        defer c.alloc.free(jmp_recheck_str);
+        try c.addInstructionWithoutLHS(jmp_recheck_str);
+
+        // Condition re-check block (target for backward jump)
+        try c.pushBlock(condition_recheck_block);
+        const condition_temp_recheck = try self.condition.compile(c);
+
+        // Branch based on re-evaluated condition
+        const jnz_recheck_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp_recheck.name, body_block.label, exit_block.label });
+        defer c.alloc.free(jnz_recheck_str);
+        try c.addInstructionWithoutLHS(jnz_recheck_str);
+
+        // Switch to exit block
+        try c.pushBlock(exit_block);
+    }
 };
 
 /// Represents a repeat-until loop statement.
@@ -419,6 +489,35 @@ pub const RepeatStatement = struct {
         }
         try pp.write("until ");
         try self.condition.pretty(pp);
+    }
+
+    /// Compile repeat-until loop
+    pub fn compile(self: *const RepeatStatement, c: *Compiler) CompileError!void {
+        // Create blocks for repeat-until loop structure
+        const body_block = try c.functions.createBlock();
+        const exit_block = try c.functions.createBlock();
+
+        // Jump to body (repeat always executes at least once)
+        const jmp_body_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{body_block.label});
+        defer c.alloc.free(jmp_body_str);
+        try c.addInstructionWithoutLHS(jmp_body_str);
+
+        // Compile body with new scope
+        try c.symbol_table.pushScope();
+        try c.pushBlock(body_block);
+        try self.block.compileBlockWithoutRet(c);
+
+        // Compile condition (in Lua, variables from body are visible in condition)
+        const condition_temp = try self.condition.compile(c);
+        c.symbol_table.popScope();
+
+        // Branch: if condition is true, exit; otherwise repeat
+        const jnz_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, exit_block.label, body_block.label });
+        defer c.alloc.free(jnz_str);
+        try c.addInstructionWithoutLHS(jnz_str);
+
+        // Switch to exit block
+        try c.pushBlock(exit_block);
     }
 };
 
@@ -1217,7 +1316,7 @@ pub const ConditionalExpression = struct {
 
     // Compile different conditions expression, blocks, branches
     // TODO: This doesn't yet handle conditional return values
-    pub fn compile(self: *const ConditionalExpression, c: *Compiler) !*Temporary {
+    pub fn compile(self: *const ConditionalExpression, c: *Compiler) CompileError!*Temporary {
         // Compile condition
         const condition_temp = try self.condition.compile(c);
 
@@ -1809,18 +1908,21 @@ pub const Program = struct {
     }
 
     /// Emit IR with Compiler
-    pub fn compile(self: *const Program, c: *Compiler) !void {
+    pub fn compile(self: *const Program, c: *Compiler) CompileError!void {
         for (self.statements) |stmt| {
             try stmt.compile(c);
         }
 
-        if (!std.mem.eql(u8, c.current_function.current_block.?.instructions.getLast(), "ret")) {
+        // Only add ret if there are instructions and the last one is not already ret
+        if (c.current_function.current_block.?.instructions.items.len == 0 or
+            !std.mem.eql(u8, c.current_function.current_block.?.instructions.getLast(), "ret"))
+        {
             _ = try c.current_function.current_block.?.addInstruction("ret");
         }
     }
 
     /// Emit IR for each statement but do not add `ret` instr at end of block;
-    pub fn compileBlockWithoutRet(self: *const Program, c: *Compiler) !void {
+    pub fn compileBlockWithoutRet(self: *const Program, c: *Compiler) CompileError!void {
         for (self.statements) |stmt| {
             try stmt.compile(c);
         }

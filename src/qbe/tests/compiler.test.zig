@@ -363,3 +363,128 @@ test "compile conditional expressions" {
         };
     }
 }
+
+test "compile loop statements" {
+    const TestCase = struct {
+        name: []const u8,
+        source: []const u8,
+        must_contain: []const []const u8,
+    };
+
+    const test_cases = [_]TestCase{
+        // Do-end block with local variable
+        .{
+            .name = "do-end block with local variable",
+            .source =
+            \\do
+            \\  local x = 5
+            \\  $puts("in do block")
+            \\end
+            ,
+            .must_contain = &.{
+                "jmp @block",
+                "@block",
+                "%var0 =l copy 5",
+                "$puts",
+            },
+        },
+        // While loop with truthy condition
+        .{
+            .name = "while loop with truthy condition",
+            .source =
+            \\local x = 3
+            \\while (x) do
+            \\  $puts("looping")
+            \\  local x = x - 1
+            \\end
+            ,
+            .must_contain = &.{
+                "jmp @block",
+                "@block",
+                "jnz %",
+                "@block",
+                "sub",
+                "jmp @block",
+            },
+        },
+        // While loop with falsy condition (should skip)
+        .{
+            .name = "while loop with falsy condition",
+            .source =
+            \\local x = 0
+            \\while (x) do
+            \\  $puts("should not run")
+            \\end
+            ,
+            .must_contain = &.{
+                "%var0 =l copy 0",
+                "jnz %",
+            },
+        },
+        // Repeat-until loop (executes at least once)
+        .{
+            .name = "repeat-until loop",
+            .source =
+            \\local x = 0
+            \\repeat
+            \\  $puts("repeat body")
+            \\  local x = 1
+            \\until (x)
+            ,
+            .must_contain = &.{
+                "jmp @block",
+                "@block",
+                "$puts",
+                "jnz %",
+            },
+        },
+        // Nested while loops
+        .{
+            .name = "nested while loops",
+            .source =
+            \\local i = 2
+            \\while (i) do
+            \\  local j = 2
+            \\  while (j) do
+            \\    $puts("nested")
+            \\  end
+            \\end
+            ,
+            .must_contain = &.{
+                "jnz %",
+                "jnz %",
+                "$puts",
+                "jmp @block",
+                "jmp @block",
+            },
+        },
+        // Do block with multiple statements
+        .{
+            .name = "do block with multiple statements",
+            .source =
+            \\do
+            \\  local a = 1
+            \\  local b = 2
+            \\  local c = a + b
+            \\end
+            ,
+            .must_contain = &.{
+                "@block",
+                "%var0 =l copy 1",
+                "%var2 =l copy 2",
+                "add",
+            },
+        },
+    };
+
+    for (test_cases) |tc| {
+        const ir = try compileToQBE(tc.source);
+        defer alloc.free(ir);
+
+        expectIRContains(ir, tc.must_contain) catch |err| {
+            std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
+            std.debug.print("Generated IR:\n{s}\n", .{ir});
+            return err;
+        };
+    }
+}
