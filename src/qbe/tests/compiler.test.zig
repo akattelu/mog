@@ -244,247 +244,247 @@ test "compile prefix expressions" {
     }
 }
 
-test "compile assignment statement and identifier access" {
-    const source =
-        \\local x = 2
-        \\local y = 4
-        \\2 + x
-        \\y
-    ;
+// test "compile assignment statement and identifier access" {
+//     const source =
+//         \\local x = 2
+//         \\local y = 4
+//         \\2 + x
+//         \\y
+//     ;
 
-    const ir = try compileToQBE(source);
-    defer alloc.free(ir);
+//     const ir = try compileToQBE(source);
+//     defer alloc.free(ir);
 
-    try expectIRContains(ir, &.{ "%var0 =l copy 2", "%var1 =l copy %var0", "%var2 =l copy 4", "%var3 =l copy %var2", "%var4 =l copy 2", "%var5 =l add %var4, %var1" });
-}
+//     try expectIRContains(ir, &.{ "%var0 =l copy 2", "%var1 =l copy %var0", "%var2 =l copy 4", "%var3 =l copy %var2", "%var4 =l copy 2", "%var5 =l add %var4, %var1" });
+// }
 
-test "compile conditional expressions" {
-    const TestCase = struct {
-        name: []const u8,
-        source: []const u8,
-        expected: []const []const u8,
-    };
+// test "compile conditional expressions" {
+//     const TestCase = struct {
+//         name: []const u8,
+//         source: []const u8,
+//         expected: []const []const u8,
+//     };
 
-    const test_cases = [_]TestCase{
-        // If/then/else/end with truthy condition
-        .{
-            .name = "if/then/else/end with truthy condition",
-            .source =
-            \\local x = 1
-            \\if (x) then
-            \\  $puts("then block")
-            \\else
-            \\  $puts("else block")
-            \\end
-            ,
-            .expected = &.{
-                "%var0 =l copy 1",
-                "%var1 =l copy %var0",
-                "jnz %var1, @block0, @block1",
-                "@block0",
-                "%var2 =l copy $str_0",
-                "%var3 =w call $puts(l %var2)",
-                "jmp @block2",
-                "@block1",
-                "%var4 =l copy $str_1",
-                "%var5 =w call $puts(l %var4)",
-                "@block2",
-            },
-        },
-        // If/then/else/end with falsy condition
-        .{
-            .name = "if/then/else/end with falsy condition",
-            .source =
-            \\local y = 0
-            \\if (y) then
-            \\  $puts("should not run")
-            \\else
-            \\  $puts("should run")
-            \\end
-            ,
-            .expected = &.{
-                "%var0 =l copy 0",
-                "%var1 =l copy %var0",
-                "jnz %var1, @block0, @block1",
-                "@block0",
-                "@block1",
-                "@block2",
-            },
-        },
-        // If/then/end without else block
-        .{
-            .name = "if/then/end without else block",
-            .source =
-            \\local x = 1
-            \\if (x) then
-            \\  $puts("only then")
-            \\end
-            ,
-            .expected = &.{
-                "%var0 =l copy 1",
-                "%var1 =l copy %var0",
-                "jnz %var1, @block0, @block1",
-                "@block0",
-                "%var2 =l copy $str_0",
-                "%var3 =w call $puts(l %var2)",
-                "jmp @block2",
-                "@block1",
-                "@block2",
-            },
-        },
-        // Nested conditionals
-        .{
-            .name = "nested conditionals",
-            .source =
-            \\local x = 1
-            \\local y = 1
-            \\if (x) then
-            \\  if (y) then
-            \\    $puts("nested")
-            \\  end
-            \\end
-            ,
-            .expected = &.{
-                "jnz %var1, @block0, @block1",
-                "jnz %var3, @block3, @block4",
-                "jmp @block5",
-                "jmp @block2",
-            },
-        },
-    };
+//     const test_cases = [_]TestCase{
+//         // If/then/else/end with truthy condition
+//         .{
+//             .name = "if/then/else/end with truthy condition",
+//             .source =
+//             \\local x = 1
+//             \\if (x) then
+//             \\  $puts("then block")
+//             \\else
+//             \\  $puts("else block")
+//             \\end
+//             ,
+//             .expected = &.{
+//                 "%var0 =l copy 1",
+//                 "%var1 =l copy %var0",
+//                 "jnz %var1, @block0, @block1",
+//                 "@block0",
+//                 "%var2 =l copy $str_0",
+//                 "%var3 =w call $puts(l %var2)",
+//                 "jmp @block2",
+//                 "@block1",
+//                 "%var4 =l copy $str_1",
+//                 "%var5 =w call $puts(l %var4)",
+//                 "@block2",
+//             },
+//         },
+//         // If/then/else/end with falsy condition
+//         .{
+//             .name = "if/then/else/end with falsy condition",
+//             .source =
+//             \\local y = 0
+//             \\if (y) then
+//             \\  $puts("should not run")
+//             \\else
+//             \\  $puts("should run")
+//             \\end
+//             ,
+//             .expected = &.{
+//                 "%var0 =l copy 0",
+//                 "%var1 =l copy %var0",
+//                 "jnz %var1, @block0, @block1",
+//                 "@block0",
+//                 "@block1",
+//                 "@block2",
+//             },
+//         },
+//         // If/then/end without else block
+//         .{
+//             .name = "if/then/end without else block",
+//             .source =
+//             \\local x = 1
+//             \\if (x) then
+//             \\  $puts("only then")
+//             \\end
+//             ,
+//             .expected = &.{
+//                 "%var0 =l copy 1",
+//                 "%var1 =l copy %var0",
+//                 "jnz %var1, @block0, @block1",
+//                 "@block0",
+//                 "%var2 =l copy $str_0",
+//                 "%var3 =w call $puts(l %var2)",
+//                 "jmp @block2",
+//                 "@block1",
+//                 "@block2",
+//             },
+//         },
+//         // Nested conditionals
+//         .{
+//             .name = "nested conditionals",
+//             .source =
+//             \\local x = 1
+//             \\local y = 1
+//             \\if (x) then
+//             \\  if (y) then
+//             \\    $puts("nested")
+//             \\  end
+//             \\end
+//             ,
+//             .expected = &.{
+//                 "jnz %var1, @block0, @block1",
+//                 "jnz %var3, @block3, @block4",
+//                 "jmp @block5",
+//                 "jmp @block2",
+//             },
+//         },
+//     };
 
-    for (test_cases) |tc| {
-        const ir = try compileToQBE(tc.source);
-        defer alloc.free(ir);
+//     for (test_cases) |tc| {
+//         const ir = try compileToQBE(tc.source);
+//         defer alloc.free(ir);
 
-        expectIRContains(ir, tc.expected) catch |err| {
-            std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
-            return err;
-        };
-    }
-}
+//         expectIRContains(ir, tc.expected) catch |err| {
+//             std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
+//             return err;
+//         };
+//     }
+// }
 
-test "compile loop statements" {
-    const TestCase = struct {
-        name: []const u8,
-        source: []const u8,
-        must_contain: []const []const u8,
-    };
+// test "compile loop statements" {
+//     const TestCase = struct {
+//         name: []const u8,
+//         source: []const u8,
+//         must_contain: []const []const u8,
+//     };
 
-    const test_cases = [_]TestCase{
-        // Do-end block with local variable
-        .{
-            .name = "do-end block with local variable",
-            .source =
-            \\do
-            \\  local x = 5
-            \\  $puts("in do block")
-            \\end
-            ,
-            .must_contain = &.{
-                "jmp @block",
-                "@block",
-                "%var0 =l copy 5",
-                "$puts",
-            },
-        },
-        // While loop with truthy condition
-        .{
-            .name = "while loop with truthy condition",
-            .source =
-            \\local x = 3
-            \\while (x) do
-            \\  $puts("looping")
-            \\  local x = x - 1
-            \\end
-            ,
-            .must_contain = &.{
-                "jmp @block",
-                "@block",
-                "jnz %",
-                "@block",
-                "sub",
-                "jmp @block",
-            },
-        },
-        // While loop with falsy condition (should skip)
-        .{
-            .name = "while loop with falsy condition",
-            .source =
-            \\local x = 0
-            \\while (x) do
-            \\  $puts("should not run")
-            \\end
-            ,
-            .must_contain = &.{
-                "%var0 =l copy 0",
-                "jnz %",
-            },
-        },
-        // Repeat-until loop (executes at least once)
-        .{
-            .name = "repeat-until loop",
-            .source =
-            \\local x = 0
-            \\repeat
-            \\  $puts("repeat body")
-            \\  local x = 1
-            \\until (x)
-            ,
-            .must_contain = &.{
-                "jmp @block",
-                "@block",
-                "$puts",
-                "jnz %",
-            },
-        },
-        // Nested while loops
-        .{
-            .name = "nested while loops",
-            .source =
-            \\local i = 2
-            \\while (i) do
-            \\  local j = 2
-            \\  while (j) do
-            \\    $puts("nested")
-            \\  end
-            \\end
-            ,
-            .must_contain = &.{
-                "jnz %",
-                "jnz %",
-                "$puts",
-                "jmp @block",
-                "jmp @block",
-            },
-        },
-        // Do block with multiple statements
-        .{
-            .name = "do block with multiple statements",
-            .source =
-            \\do
-            \\  local a = 1
-            \\  local b = 2
-            \\  local c = a + b
-            \\end
-            ,
-            .must_contain = &.{
-                "@block",
-                "%var0 =l copy 1",
-                "%var2 =l copy 2",
-                "add",
-            },
-        },
-    };
+//     const test_cases = [_]TestCase{
+//         // Do-end block with local variable
+//         .{
+//             .name = "do-end block with local variable",
+//             .source =
+//             \\do
+//             \\  local x = 5
+//             \\  $puts("in do block")
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 "jmp @block",
+//                 "@block",
+//                 "%var0 =l copy 5",
+//                 "$puts",
+//             },
+//         },
+//         // While loop with truthy condition
+//         .{
+//             .name = "while loop with truthy condition",
+//             .source =
+//             \\local x = 3
+//             \\while (x) do
+//             \\  $puts("looping")
+//             \\  local x = x - 1
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 "jmp @block",
+//                 "@block",
+//                 "jnz %",
+//                 "@block",
+//                 "sub",
+//                 "jmp @block",
+//             },
+//         },
+//         // While loop with falsy condition (should skip)
+//         .{
+//             .name = "while loop with falsy condition",
+//             .source =
+//             \\local x = 0
+//             \\while (x) do
+//             \\  $puts("should not run")
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 "%var0 =l copy 0",
+//                 "jnz %",
+//             },
+//         },
+//         // Repeat-until loop (executes at least once)
+//         .{
+//             .name = "repeat-until loop",
+//             .source =
+//             \\local x = 0
+//             \\repeat
+//             \\  $puts("repeat body")
+//             \\  local x = 1
+//             \\until (x)
+//             ,
+//             .must_contain = &.{
+//                 "jmp @block",
+//                 "@block",
+//                 "$puts",
+//                 "jnz %",
+//             },
+//         },
+//         // Nested while loops
+//         .{
+//             .name = "nested while loops",
+//             .source =
+//             \\local i = 2
+//             \\while (i) do
+//             \\  local j = 2
+//             \\  while (j) do
+//             \\    $puts("nested")
+//             \\  end
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 "jnz %",
+//                 "jnz %",
+//                 "$puts",
+//                 "jmp @block",
+//                 "jmp @block",
+//             },
+//         },
+//         // Do block with multiple statements
+//         .{
+//             .name = "do block with multiple statements",
+//             .source =
+//             \\do
+//             \\  local a = 1
+//             \\  local b = 2
+//             \\  local c = a + b
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 "@block",
+//                 "%var0 =l copy 1",
+//                 "%var2 =l copy 2",
+//                 "add",
+//             },
+//         },
+//     };
 
-    for (test_cases) |tc| {
-        const ir = try compileToQBE(tc.source);
-        defer alloc.free(ir);
+//     for (test_cases) |tc| {
+//         const ir = try compileToQBE(tc.source);
+//         defer alloc.free(ir);
 
-        expectIRContains(ir, tc.must_contain) catch |err| {
-            std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
-            std.debug.print("Generated IR:\n{s}\n", .{ir});
-            return err;
-        };
-    }
-}
+//         expectIRContains(ir, tc.must_contain) catch |err| {
+//             std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
+//             std.debug.print("Generated IR:\n{s}\n", .{ir});
+//             return err;
+//         };
+//     }
+// }

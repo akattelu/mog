@@ -14,13 +14,18 @@ $puts("[PASS] While loop skipped when condition is false")
 $puts("")
 
 $puts("[TEST] While Loop - Condition True (Finite via Decrement)")
-$puts("Note: This demonstrates loop structure but will hang without re-assignment support")
-$puts("[SKIP] Skipping infinite loop test - re-assignment not yet implemented")
+local y = 10
+while (y) do
+	$printf("[PASS] While loop on iteration %d/%d\n", y, 10)
+	y = y - 1
+end
 $puts("")
 
 $puts("[TEST] Repeat-Until Loop (Always Executes Once)")
+$puts("[NOTE] This test is failing")
 repeat
 	$puts("[PASS] Repeat loop body executed at least once")
+
 until (1)
 $puts("[PASS] Repeat loop exited after condition was true")
 $puts("")

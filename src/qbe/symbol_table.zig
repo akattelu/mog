@@ -105,6 +105,15 @@ pub const SymbolTable = struct {
         self.next_var_id = self.next_var_id + 1;
         return temp;
     }
+
+    /// Checks if the symbol with name is already defined in any scope
+    pub fn isDefined(self: *SymbolTable, name: []const u8) bool {
+        const matched_temp = self.lookup(name);
+        if (matched_temp) |_| {
+            return true;
+        }
+        return false;
+    }
 };
 
 /// Holds a tuple of sigil (func/global) and temp name

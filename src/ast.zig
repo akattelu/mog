@@ -171,10 +171,6 @@ pub const AssignmentStatement = struct {
     // Compile assignment statements
     // Makes new defs in symbol table
     pub fn compile(self: *const AssignmentStatement, c: *Compiler) CompileError!void {
-        if (!self.is_local) {
-            // TODO: support globals via allocations later
-            unreachable;
-        }
         // Compute RHS
         // This should be an expr list in the future
         const rhs_temp = try self.expr.compile(c);
@@ -182,11 +178,14 @@ pub const AssignmentStatement = struct {
         defer c.alloc.free(rhs_temp_var);
 
         // Only supporting local assignment for now
+        // TODO: Globals will need to be supported via changing this sigil
         const sigil: Sigil = .function;
 
         // TODO: this needs to handle re-assignment of existing variables
         for (self.names.names.items) |name| {
-            // Define association in symbol table
+            // Store with alloc instruction if its the first time this variable is seen
+            var pointer_temp = c.symbol_table.lookup(name.value) orelse try c.addInstruction(.function, .l, "alloc8 8");
+            // Always define/redefine association in symbol table
             const lhs_temp = try c.symbol_table.define(name.value, sigil, rhs_temp.datatype);
             var writer = std.Io.Writer.Allocating.init(c.alloc);
             defer writer.deinit();
@@ -195,8 +194,10 @@ pub const AssignmentStatement = struct {
             try lhs_temp.write(&writer.writer);
             try writer.writer.writeAll(" =");
             try writer.writer.writeAll(@tagName(rhs_temp.datatype));
-            try writer.writer.writeAll(" copy ");
+            try writer.writer.writeAll(" storel ");
             try rhs_temp.write(&writer.writer);
+            try writer.writer.writeAll(", ");
+            try pointer_temp.write(&writer.writer);
 
             _ = try c.current_function.current_block.?.addInstruction(writer.written());
         }
