@@ -178,28 +178,34 @@ pub const AssignmentStatement = struct {
         defer c.alloc.free(rhs_temp_var);
 
         // Only supporting local assignment for now
-        // TODO: Globals will need to be supported via changing this sigil
-        const sigil: Sigil = .function;
-
-        // TODO: this needs to handle re-assignment of existing variables
         for (self.names.names.items) |name| {
             // Store with alloc instruction if its the first time this variable is seen
-            var pointer_temp = c.symbol_table.lookup(name.value) orelse try c.addInstruction(.function, .l, "alloc8 8");
+            // var pointer_temp = c.symbol_table.lookup(name.value) orelse try c.addInstruction(.function, .l, "alloc8 8");
             // Always define/redefine association in symbol table
-            const lhs_temp = try c.symbol_table.define(name.value, sigil, rhs_temp.datatype);
-            var writer = std.Io.Writer.Allocating.init(c.alloc);
-            defer writer.deinit();
 
-            // Write new associated temp directly
-            try lhs_temp.write(&writer.writer);
-            try writer.writer.writeAll(" =");
-            try writer.writer.writeAll(@tagName(rhs_temp.datatype));
-            try writer.writer.writeAll(" storel ");
-            try rhs_temp.write(&writer.writer);
-            try writer.writer.writeAll(", ");
-            try pointer_temp.write(&writer.writer);
+            // Symbol has been defined before, so we know that there is a temporary that is defined
+            // in this scope or a parent
+            if (c.symbol_table.lookup(name.value)) |existing_temp| {
+                // Write the store instruction
+                const store_instr = try std.fmt.allocPrint(c.alloc, "storel %{s}, %{s}", .{ rhs_temp.name, existing_temp.name });
+                defer c.alloc.free(store_instr);
+                try c.addInstructionWithoutLHS(store_instr);
+            } else {
+                // Symbol doesn't exist in this scope
+                // Create a mapping of the symbol to a temporary (should exist in child scopes)
+                // Add an alloc instruction and store the pointer in the temporary
+                // Future calls to lookup will return this temporary which holds the ptr as a long
+                const lhs_temp = try c.symbol_table.define(name.value, .function, .l);
+                const alloc_instr = try std.fmt.allocPrint(c.alloc, "%{s} =l alloc8 8", .{lhs_temp.name});
+                defer c.alloc.free(alloc_instr);
+                try c.addInstructionWithoutLHS(alloc_instr);
+                // LHS temp is now associated with a temporary that points to the address where name.value is stored
 
-            _ = try c.current_function.current_block.?.addInstruction(writer.written());
+                // Write the store instruction
+                const store_instr = try std.fmt.allocPrint(c.alloc, "storel %{s}, %{s}", .{ rhs_temp.name, lhs_temp.name });
+                defer c.alloc.free(store_instr);
+                try c.addInstructionWithoutLHS(store_instr);
+            }
         }
     }
 };
@@ -818,7 +824,10 @@ pub const Identifier = struct {
 
     // Compile identifier by lookup in symtab
     pub fn compile(self: *const Identifier, c: *Compiler) !*Temporary {
-        return c.symbol_table.lookup(self.value) orelse return CompileError.Invalid;
+        const ptr = c.symbol_table.lookup(self.value) orelse return CompileError.Invalid;
+        const instr = try std.fmt.allocPrint(c.alloc, "loadl %{s}", .{ptr.name});
+        defer c.alloc.free(instr);
+        return try c.addInstruction(.function, .l, instr);
     }
 };
 
