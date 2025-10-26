@@ -22,7 +22,6 @@ end
 $puts("")
 
 $puts("[TEST] Repeat-Until Loop (Always Executes Once)")
-$puts("[NOTE] This test is failing")
 repeat
 	$puts("[PASS] Repeat loop body executed at least once")
 
