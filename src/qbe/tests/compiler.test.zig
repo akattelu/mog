@@ -116,6 +116,23 @@ test "compile float literals" {
     });
 }
 
+test "compile boolean literals" {
+    const source =
+        \\true
+        \\false
+    ;
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
+
+    try expectIRContains(ir, &.{
+        "export function w $main()",
+        "@start",
+        "%var0 =l copy 1",
+        "%var1 =l copy 0",
+        "ret",
+    });
+}
+
 test "compile string literals" {
     const source =
         \\"hello world"

@@ -1,6 +1,6 @@
 
-local x = 1
-local y = 0
+local x = true
+local y = false
 
 $puts("[TEST] If/Then/Else/End True Case")
 if (x) then

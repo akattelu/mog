@@ -788,6 +788,7 @@ pub const Expression = union(ExpressionTypes) {
             .Prefix => |n| try n.compile(c),
             .Identifier => |n| try n.compile(c),
             .Conditional => |n| try n.compile(c),
+            .Boolean => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -1491,6 +1492,14 @@ pub const BooleanLiteral = struct {
         } else {
             try pp.write("false");
         }
+    }
+
+    /// Compile 1 for true, 0 for false
+    pub fn compile(self: *const BooleanLiteral, c: *Compiler) !*Temporary {
+        if (self.value) {
+            return try c.addInstruction(.function, .l, "copy 1");
+        }
+        return try c.addInstruction(.function, .l, "copy 0");
     }
 };
 
