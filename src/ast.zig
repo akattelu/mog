@@ -789,6 +789,7 @@ pub const Expression = union(ExpressionTypes) {
             .Identifier => |n| try n.compile(c),
             .Conditional => |n| try n.compile(c),
             .Boolean => |n| try n.compile(c),
+            .Nil => |n| try n.compile(c),
             else => unreachable,
         };
     }
@@ -1521,6 +1522,11 @@ pub const Nil = struct {
     /// Pretty prints the nil literal
     pub fn pretty(_: *const Nil, pp: *PrettyPrinter) Writer.Error!void {
         try pp.write("nil");
+    }
+
+    /// Compile nil expressions as 0 for now
+    pub fn compile(_: *const Nil, c: *Compiler) !*Temporary {
+        return try c.addInstruction(.function, .l, "copy 0");
     }
 };
 
