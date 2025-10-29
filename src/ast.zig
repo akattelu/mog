@@ -86,7 +86,7 @@ pub const Statement = union(StatementTypes) {
     /// Emit IR with Compiler
     pub fn compile(self: *const Statement, c: *Compiler) CompileError!void {
         switch (self.*) {
-            .Expression => |n| _ = try n.expr.compile(c),
+            .Expression => |n| try n.compile(c),
             .Assignment => |n| try n.compile(c),
             .Do => |n| try n.compile(c),
             .While => |n| try n.compile(c),
@@ -179,13 +179,9 @@ pub const AssignmentStatement = struct {
 
         // Only supporting local assignment for now
         for (self.names.names.items) |name| {
-            // Store with alloc instruction if its the first time this variable is seen
-            // var pointer_temp = c.symbol_table.lookup(name.value) orelse try c.addInstruction(.function, .l, "alloc8 8");
-            // Always define/redefine association in symbol table
-
-            // Symbol has been defined before, so we know that there is a temporary that is defined
-            // in this scope or a parent
             if (c.symbol_table.lookup(name.value)) |existing_temp| {
+                // Symbol has been defined before, so we know that there is a temporary that is defined
+                // in this scope or a parent
                 // Write the store instruction
                 const store_instr = try std.fmt.allocPrint(c.alloc, "storel %{s}, %{s}", .{ rhs_temp.name, existing_temp.name });
                 defer c.alloc.free(store_instr);
@@ -306,8 +302,7 @@ pub const ExpressionStatement = struct {
 
     /// Emit IR with Compiler
     pub fn compile(self: *const ExpressionStatement, c: *Compiler) !void {
-        _ = self;
-        _ = c;
+        _ = try self.expr.compile(c);
     }
 };
 
