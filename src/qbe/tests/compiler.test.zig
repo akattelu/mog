@@ -390,6 +390,31 @@ test "compile assignment statement and identifier access" {
                 "%var7 =l loadl %var3",
             },
         },
+        // Single variable multiple reassignment
+        .{
+            .name = "multiple variables with expressions",
+            .source =
+            \\local x = 2
+            \\x = 3
+            \\x = 4
+            \\y = x
+            \\y
+            ,
+            .expected = &.{
+                // x allocation and store
+                "%var0 =l copy 2",
+                "%var1 =l alloc8 8",
+                "storel %var0, %var1",
+                "%var2 =l copy 3",
+                "storel %var2, %var1",
+                "%var3 =l copy 4",
+                "storel %var3, %var1",
+                "%var4 =l loadl %var1",
+                "%var5 =l alloc8 8",
+                "storel %var4, %var5",
+                "%var6 =l loadl %var5",
+            },
+        },
     };
 
     for (test_cases) |tc| {
