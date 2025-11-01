@@ -15,7 +15,7 @@ pub const BoxedValue = union(BoxedValueType) {
     function,
     builtin,
 
-    pub fn maskFor(t: BoxedValueType) u64 {
+    inline fn maskFor(t: BoxedValueType) u64 {
         return @as(u64, @intFromEnum(t)) << 48;
     }
 
@@ -42,9 +42,17 @@ pub const BoxedValue = union(BoxedValueType) {
         return try c.symbol_table.createTemporary(.function, .d);
     }
 
+    /// Turns an i32 into a nan boxed u64
     pub fn fromInt(i: i32) u64 {
         const int64 = @as(u32, @bitCast(i));
         const typemask: u64 = maskFor(.int);
         return @bitCast(NAN_TAG_BASE | typemask | int64);
+    }
+
+    /// Turns boolean into nan boxed u64
+    pub fn fromBoolean(b: bool) u64 {
+        const lsb = @as(u64, @intFromBool(b));
+        const typemask = maskFor(.bool);
+        return @bitCast(NAN_TAG_BASE | typemask | lsb);
     }
 };

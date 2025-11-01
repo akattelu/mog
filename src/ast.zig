@@ -1417,13 +1417,15 @@ pub const NumberLiteral = struct {
                 // Convert the literal into nan value
                 const nanboxed = boxed.BoxedValue.fromInt(i);
                 // Nan box the literal in the IR
-                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{nanboxed}); // always use double
+                // Not using d_ here because the value is easier to express as a u64
+                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{nanboxed});
                 defer c.alloc.free(instr);
-                // Use long data type
-                return try c.addInstruction(.function, .d, instr);
+
+                return try c.addInstruction(.function, .d, instr); // always use double temp type
             },
             .Float => |f| {
                 // Always use double data type for instruction and return type
+                // This doesn't need to change for NaN boxing because its a valid double
                 const instr = try std.fmt.allocPrint(c.alloc, "copy d_{d}", .{f});
                 defer c.alloc.free(instr);
                 return try c.addInstruction(.function, .d, instr);
@@ -1501,10 +1503,11 @@ pub const BooleanLiteral = struct {
 
     /// Compile 1 for true, 0 for false
     pub fn compile(self: *const BooleanLiteral, c: *Compiler) !*Temporary {
-        if (self.value) {
-            return try c.addInstruction(.function, .l, "copy 1");
-        }
-        return try c.addInstruction(.function, .l, "copy 0");
+        const b = boxed.BoxedValue.fromBoolean(self.value); // create boxed u64 from boolean
+        const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{b});
+        defer c.alloc.free(instr);
+
+        return try c.addInstruction(.function, .d, instr);
     }
 };
 

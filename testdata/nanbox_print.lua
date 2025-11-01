@@ -1,2 +1,7 @@
 local x = 42
-$printf("hex value: %x, number value: %d\n", x, x);
+local y = 100
+
+$printf("x hex: %lx, x int: %d,  y hex: %lx, y int: %d \n", x, x, y, y)
+
+local z = true
+$printf("z hex %lx, z true boolean value is %d\n", z, z)
