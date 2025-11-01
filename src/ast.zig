@@ -1327,13 +1327,14 @@ pub const ConditionalExpression = struct {
     pub fn compile(self: *const ConditionalExpression, c: *Compiler) CompileError!*Temporary {
         // Compile condition
         const condition_temp = try self.condition.compile(c);
+        const unboxed_condition_temp = try boxed.getValueInstruction(.bool, c, condition_temp);
 
         const then_block = try c.functions.createBlock();
         const else_block = try c.functions.createBlock();
         const end_block = try c.functions.createBlock();
 
         // Create "then" block jump instruction
-        const jnz_then_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, then_block.label, else_block.label });
+        const jnz_then_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ unboxed_condition_temp.name, then_block.label, else_block.label });
         defer c.alloc.free(jnz_then_str);
         // Add jump instruction at end of then block
         try c.addInstructionWithoutLHS(jnz_then_str);

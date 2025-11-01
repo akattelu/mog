@@ -1,3 +1,4 @@
+const allocPrint = @import("std").fmt.allocPrint;
 const Compiler = @import("compiler.zig").QBECompiler;
 const Temporary = @import("symbol_table.zig").Temporary;
 
@@ -21,13 +22,26 @@ pub const BoxedValue = union(BoxedValueType) {
         return @as(u64, @intFromEnum(t)) << 48;
     }
 
-    pub fn getValueInstruction(comptime t: BoxedValueType, c: *Compiler) !*Temporary {
+    /// Emit instructions that unbox the nan value and return the temporary its stored in
+    pub fn getValueInstruction(comptime t: BoxedValueType, c: *Compiler, boxed: *Temporary) !*Temporary {
         return switch (t) {
             .bool => {
-                _ = try c.symbol_table.createTemporary(.function, .d);
+                const mask: u32 = @as(u32, 0b1);
+
+                // Cast the d into w to drop bits and get the right type
+                const cast_instr = try allocPrint(c.alloc, "cast %{s}", .{boxed.name});
+                defer c.alloc.free(cast_instr);
+                const cast_result_temp = try c.addInstruction(.function, .l, cast_instr);
+
+                // Mask all but last bit and return result
+                const mask_instr = try allocPrint(c.alloc, "and %{s}, {d}", .{ cast_result_temp.name, mask });
+                defer c.alloc.free(mask_instr);
+                const masked_temp = try c.addInstruction(.function, .l, mask_instr);
+
+                return masked_temp;
             },
             else => {
-                return try c.symbol_table.createTemporary(.function, .d);
+                unreachable;
             },
         };
     }

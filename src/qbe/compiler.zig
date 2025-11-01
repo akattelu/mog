@@ -89,6 +89,18 @@ pub const QBECompiler = struct {
         _ = try self.current_function.current_block.?.addInstruction(rhs);
     }
 
+    /// Call $printf for debugging
+    pub fn addDebugPrint(self: *QBECompiler, temp: *Temporary, fmt: []const u8) !void {
+        const s = try self.data.addString(fmt);
+        const s_copy_instr = try std.fmt.allocPrint(self.alloc, "copy {s}", .{s});
+        defer self.alloc.free(s_copy_instr);
+        const s_local = try self.addInstruction(.function, .l, s_copy_instr);
+
+        const rhs = try std.fmt.allocPrint(self.alloc, "call $printf(l %{s}, ..., {s} %{s})", .{ s_local.name, @tagName(temp.datatype), temp.name });
+        defer self.alloc.free(rhs);
+        _ = try self.addInstruction(.function, .w, rhs);
+    }
+
     /// Store current block and set current_block ptr
     pub fn pushBlock(self: *QBECompiler, block: *function.Block) !void {
         try self.current_function.putBlock(block);
