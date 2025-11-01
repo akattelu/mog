@@ -46,18 +46,6 @@ pub const BoxedValue = union(BoxedValueType) {
         };
     }
 
-    pub fn getTruthinessValue(comptime t: BoxedValueType, c: *Compiler) !*Temporary {
-        if (t == .bool) {
-            _ = try c.symbol_table.createTemporary(.l);
-        }
-        return try c.symbol_table.createTemporary(.d);
-    }
-
-    pub fn toCValue(t: *Temporary, c: *Compiler) !*Temporary {
-        _ = t;
-        return try c.symbol_table.createTemporary(.d);
-    }
-
     /// Turns an i32 into a nan boxed u64
     pub fn fromInt(i: i32) u64 {
         const int64 = @as(u32, @bitCast(i));

@@ -77,24 +77,24 @@ test "add instruction helper" {
     try std.testing.expectEqualStrings(temp.name, "var0");
 }
 
-// test "compile integer literals" {
-//     const source =
-//         \\0
-//         \\42
-//         \\9999999
-//     ;
-//     const ir = try compileToQBE(source);
-//     defer alloc.free(ir);
+test "compile integer literals" {
+    const source =
+        \\0
+        \\42
+        \\9999999
+    ;
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
 
-//     try expectIRContains(ir, &.{
-//         "export function w $main()",
-//         "@start",
-//         "%var0 =l copy 0",
-//         "%var1 =l copy 42",
-//         "%var2 =l copy 9999999",
-//         "ret",
-//     });
-// }
+    try expectIRContains(ir, &.{
+        "export function w $main()",
+        "@start",
+        "%var0 =d copy 18445055223849287680",
+        "%var1 =d copy 18445055223849287722",
+        "%var2 =d copy 18445055223859287679",
+        "ret",
+    });
+}
 
 test "compile float literals" {
     const source =
@@ -115,22 +115,22 @@ test "compile float literals" {
     });
 }
 
-// test "compile boolean literals" {
-//     const source =
-//         \\true
-//         \\false
-//     ;
-//     const ir = try compileToQBE(source);
-//     defer alloc.free(ir);
+test "compile boolean literals" {
+    const source =
+        \\true
+        \\false
+    ;
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
 
-//     try expectIRContains(ir, &.{
-//         "export function w $main()",
-//         "@start",
-//         "%var0 =l copy 1",
-//         "%var1 =l copy 0",
-//         "ret",
-//     });
-// }
+    try expectIRContains(ir, &.{
+        "export function w $main()",
+        "@start",
+        "%var0 =d copy 18444773748872577025",
+        "%var1 =d copy 18444773748872577024",
+        "ret",
+    });
+}
 
 test "compile string literals" {
     const source =
@@ -149,21 +149,21 @@ test "compile string literals" {
     });
 }
 
-// test "compile nil" {
-//     const source =
-//         \\nil
-//     ;
+test "compile nil" {
+    const source =
+        \\nil
+    ;
 
-//     const ir = try compileToQBE(source);
-//     defer alloc.free(ir);
+    const ir = try compileToQBE(source);
+    defer alloc.free(ir);
 
-//     try expectIRContains(ir, &.{
-//         "export function w $main()",
-//         "@start",
-//         "%var0 =l copy 0",
-//         "ret",
-//     });
-// }
+    try expectIRContains(ir, &.{
+        "export function w $main()",
+        "@start",
+        "%var0 =d copy 18444492273895866368",
+        "ret",
+    });
+}
 
 // test "compile builtin call with expression list" {
 //     const source =
