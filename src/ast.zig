@@ -1413,7 +1413,10 @@ pub const NumberLiteral = struct {
     pub fn compile(self: *const NumberLiteral, c: *Compiler) !*Temporary {
         switch (self.value) {
             .Integer => |i| {
-                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{i});
+                // Convert the literal into nan value
+
+                // Nan box the literal in the IR
+                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{i}); // always use double
                 defer c.alloc.free(instr);
                 // Use long data type
                 return try c.addInstruction(.function, .l, instr);
