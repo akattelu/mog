@@ -15,6 +15,8 @@ pub const BoxedValue = union(BoxedValueType) {
     function,
     builtin,
 
+    pub const nil_value = NAN_TAG_BASE; // this works cause tag is 0b000 and theres no value
+
     inline fn maskFor(t: BoxedValueType) u64 {
         return @as(u64, @intFromEnum(t)) << 48;
     }

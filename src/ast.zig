@@ -10,7 +10,7 @@ const Type = @import("qbe/function.zig").Type;
 const Writer = std.Io.Writer;
 pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || error{Invalid};
 const testing = std.testing;
-const boxed = @import("qbe/boxed_value.zig");
+const boxed = @import("qbe/boxed_value.zig").BoxedValue;
 
 /// The different types of statements in the AST.
 pub const StatementTypes = enum { Assignment, Return, Expression, FunctionDeclaration, Do, While, Repeat, ForNumeric, ForGeneric, Break };
@@ -1415,7 +1415,7 @@ pub const NumberLiteral = struct {
         switch (self.value) {
             .Integer => |i| {
                 // Convert the literal into nan value
-                const nanboxed = boxed.BoxedValue.fromInt(i);
+                const nanboxed = boxed.fromInt(i);
                 // Nan box the literal in the IR
                 // Not using d_ here because the value is easier to express as a u64
                 const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{nanboxed});
@@ -1503,7 +1503,7 @@ pub const BooleanLiteral = struct {
 
     /// Compile 1 for true, 0 for false
     pub fn compile(self: *const BooleanLiteral, c: *Compiler) !*Temporary {
-        const b = boxed.BoxedValue.fromBoolean(self.value); // create boxed u64 from boolean
+        const b = boxed.fromBoolean(self.value); // create boxed u64 from boolean
         const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{b});
         defer c.alloc.free(instr);
 
@@ -1533,7 +1533,11 @@ pub const Nil = struct {
 
     /// Compile nil expressions as 0 for now
     pub fn compile(_: *const Nil, c: *Compiler) !*Temporary {
-        return try c.addInstruction(.function, .l, "copy 0");
+        const b = boxed.nil_value; // create boxed u64 from boolean
+        const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{b});
+        defer c.alloc.free(instr);
+
+        return try c.addInstruction(.function, .d, instr);
     }
 };
 

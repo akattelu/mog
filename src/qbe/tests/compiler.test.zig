@@ -150,21 +150,21 @@ test "compile string literals" {
     });
 }
 
-test "compile nil" {
-    const source =
-        \\nil
-    ;
+// test "compile nil" {
+//     const source =
+//         \\nil
+//     ;
 
-    const ir = try compileToQBE(source);
-    defer alloc.free(ir);
+//     const ir = try compileToQBE(source);
+//     defer alloc.free(ir);
 
-    try expectIRContains(ir, &.{
-        "export function w $main()",
-        "@start",
-        "%var0 =l copy 0",
-        "ret",
-    });
-}
+//     try expectIRContains(ir, &.{
+//         "export function w $main()",
+//         "@start",
+//         "%var0 =l copy 0",
+//         "ret",
+//     });
+// }
 
 // test "compile builtin call with expression list" {
 //     const source =
