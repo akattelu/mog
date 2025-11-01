@@ -5,7 +5,6 @@ const qbe = @import("qbe/compiler.zig");
 const Compiler = qbe.QBECompiler;
 const symbol_table = @import("qbe/symbol_table.zig");
 const Temporary = symbol_table.Temporary;
-const Sigil = symbol_table.Sigil;
 const Type = @import("qbe/function.zig").Type;
 const Writer = std.Io.Writer;
 pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || error{Invalid};
@@ -186,22 +185,22 @@ pub const AssignmentStatement = struct {
                 // Write the store instruction
                 const store_instr = try std.fmt.allocPrint(c.alloc, "stored %{s}, %{s}", .{ rhs_temp.name, existing_temp.name });
                 defer c.alloc.free(store_instr);
-                try c.addInstructionWithoutLHS(store_instr);
+                try c.emitString(store_instr);
             } else {
                 // Symbol doesn't exist in this scope
                 // Create a mapping of the symbol to a temporary (should exist in child scopes)
                 // Add an alloc instruction and store the pointer in the temporary
                 // Future calls to lookup will return this temporary which holds the ptr as a long
-                const lhs_temp = try c.symbol_table.define(name.value, .function, .l);
+                const lhs_temp = try c.symbol_table.define(name.value, .l);
                 const alloc_instr = try std.fmt.allocPrint(c.alloc, "%{s} =l alloc8 8", .{lhs_temp.name});
                 defer c.alloc.free(alloc_instr);
-                try c.addInstructionWithoutLHS(alloc_instr);
+                try c.emitString(alloc_instr);
                 // LHS temp is now associated with a temporary that points to the address where name.value is stored
 
                 // Write the store instruction
                 const store_instr = try std.fmt.allocPrint(c.alloc, "stored %{s}, %{s}", .{ rhs_temp.name, lhs_temp.name });
                 defer c.alloc.free(store_instr);
-                try c.addInstructionWithoutLHS(store_instr);
+                try c.emitString(store_instr);
             }
         }
     }
@@ -351,7 +350,7 @@ pub const DoStatement = struct {
         // Jump to do block
         const jmp_do_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{do_block.label});
         defer c.alloc.free(jmp_do_str);
-        try c.addInstructionWithoutLHS(jmp_do_str);
+        try c.emitString(jmp_do_str);
 
         // Compile do body with new scope
         try c.symbol_table.pushScope();
@@ -365,7 +364,7 @@ pub const DoStatement = struct {
         // Jump to continuation
         const jmp_continue_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{continue_block.label});
         defer c.alloc.free(jmp_continue_str);
-        try c.addInstructionWithoutLHS(jmp_continue_str);
+        try c.emitString(jmp_continue_str);
 
         // Switch to continuation block
         try c.pushBlock(continue_block);
@@ -427,7 +426,7 @@ pub const WhileStatement = struct {
         // Branch based on initial condition
         const jnz_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, body_block.label, exit_block.label });
         defer c.alloc.free(jnz_str);
-        try c.addInstructionWithoutLHS(jnz_str);
+        try c.emitString(jnz_str);
 
         // Compile body with new scope
         try c.symbol_table.pushScope();
@@ -438,7 +437,7 @@ pub const WhileStatement = struct {
         // Jump to condition re-check block (for next iteration)
         const jmp_recheck_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{condition_recheck_block.label});
         defer c.alloc.free(jmp_recheck_str);
-        try c.addInstructionWithoutLHS(jmp_recheck_str);
+        try c.emitString(jmp_recheck_str);
 
         // Condition re-check block (target for backward jump)
         try c.pushBlock(condition_recheck_block);
@@ -447,7 +446,7 @@ pub const WhileStatement = struct {
         // Branch based on re-evaluated condition
         const jnz_recheck_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp_recheck.name, body_block.label, exit_block.label });
         defer c.alloc.free(jnz_recheck_str);
-        try c.addInstructionWithoutLHS(jnz_recheck_str);
+        try c.emitString(jnz_recheck_str);
 
         // Switch to exit block
         try c.pushBlock(exit_block);
@@ -503,7 +502,7 @@ pub const RepeatStatement = struct {
         // Jump to body (repeat always executes at least once)
         const jmp_body_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{body_block.label});
         defer c.alloc.free(jmp_body_str);
-        try c.addInstructionWithoutLHS(jmp_body_str);
+        try c.emitString(jmp_body_str);
 
         // Compile body with new scope
         try c.symbol_table.pushScope();
@@ -517,7 +516,7 @@ pub const RepeatStatement = struct {
         // Branch: if condition is true, exit; otherwise repeat
         const jnz_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, exit_block.label, body_block.label });
         defer c.alloc.free(jnz_str);
-        try c.addInstructionWithoutLHS(jnz_str);
+        try c.emitString(jnz_str);
 
         // Switch to exit block
         try c.pushBlock(exit_block);
@@ -825,7 +824,7 @@ pub const Identifier = struct {
         const ptr = c.symbol_table.lookup(self.value) orelse return CompileError.Invalid;
         const instr = try std.fmt.allocPrint(c.alloc, "loadd %{s}", .{ptr.name});
         defer c.alloc.free(instr);
-        return try c.addInstruction(.function, .d, instr);
+        return try c.emitAssignment(.d, instr);
     }
 };
 
@@ -952,12 +951,12 @@ pub const InfixExpression = struct {
             // handle comparison instruction by appending result type to instr name
             const result_instr = try std.fmt.allocPrint(c.alloc, "{s}{s} {s}, {s}", .{ comparison_instruction.?, @tagName(result_type), lhs_var_name, rhs_var_name });
             defer c.alloc.free(result_instr);
-            return try c.addInstruction(.function, result_type, result_instr);
+            return try c.emitAssignment(result_type, result_instr);
         } else {
             // must be arithmetic / logical operator
             const result_instr = try std.fmt.allocPrint(c.alloc, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
             defer c.alloc.free(result_instr);
-            return try c.addInstruction(.function, result_type, result_instr);
+            return try c.emitAssignment(result_type, result_instr);
         }
     }
 };
@@ -1118,7 +1117,7 @@ pub const FunctionCallExpression = struct {
                         const call_instr = try std.fmt.allocPrint(c.alloc, "call {s}(l {s})", .{ cbuiltin.name, string_data_ref });
                         defer c.alloc.free(call_instr);
 
-                        const tmp = try c.addInstruction(.function, .w, call_instr);
+                        const tmp = try c.emitAssignment(.w, call_instr);
                         return tmp;
                     },
 
@@ -1143,7 +1142,7 @@ pub const FunctionCallExpression = struct {
                             }
                         }
                         try writer.writer.writeAll(")");
-                        return try c.addInstruction(.function, .w, writer.written());
+                        return try c.emitAssignment(.w, writer.written());
                     },
 
                     else => unreachable,
@@ -1243,15 +1242,15 @@ pub const PrefixExpression = struct {
         if (std.mem.eql(u8, "-", self.operator)) {
             const neg_instr = try std.fmt.allocPrint(c.alloc, "neg {s}", .{expr_var_name});
             defer c.alloc.free(neg_instr);
-            return try c.addInstruction(.function, expr_temp.datatype, neg_instr);
+            return try c.emitAssignment(expr_temp.datatype, neg_instr);
         } else if (std.mem.eql(u8, "not", self.operator)) {
             const xor_instr = try std.fmt.allocPrint(c.alloc, "xor {s}, 1", .{expr_var_name});
             defer c.alloc.free(xor_instr);
-            return try c.addInstruction(.function, expr_temp.datatype, xor_instr);
+            return try c.emitAssignment(expr_temp.datatype, xor_instr);
         } else if (std.mem.eql(u8, "~", self.operator)) {
             const not_expr = try std.fmt.allocPrint(c.alloc, "xor {s}, -1", .{expr_var_name});
             defer c.alloc.free(not_expr);
-            return try c.addInstruction(.function, expr_temp.datatype, not_expr);
+            return try c.emitAssignment(expr_temp.datatype, not_expr);
         }
         if (std.mem.eql(u8, "#", self.operator)) {
             // TODO implement this for strings and tables
@@ -1337,7 +1336,7 @@ pub const ConditionalExpression = struct {
         const jnz_then_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ unboxed_condition_temp.name, then_block.label, else_block.label });
         defer c.alloc.free(jnz_then_str);
         // Add jump instruction at end of then block
-        try c.addInstructionWithoutLHS(jnz_then_str);
+        try c.emitString(jnz_then_str);
 
         // Compile then block
         // Push new block so that compile adds statements into it
@@ -1350,7 +1349,7 @@ pub const ConditionalExpression = struct {
         defer c.alloc.free(jump_end_str);
 
         // Add jump instruction at end of then block
-        try c.addInstructionWithoutLHS(jump_end_str);
+        try c.emitString(jump_end_str);
         c.symbol_table.popScope();
 
         // Compile else block
@@ -1367,7 +1366,7 @@ pub const ConditionalExpression = struct {
 
         // NOTE: For now since we aren't handling returned values
         // Make a single copy 1 instruction to use as the returned temporary
-        return try c.addInstruction(.function, .l, "copy 1");
+        return try c.emitAssignment(.l, "copy 1");
     }
 };
 
@@ -1422,14 +1421,14 @@ pub const NumberLiteral = struct {
                 const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{nanboxed});
                 defer c.alloc.free(instr);
 
-                return try c.addInstruction(.function, .d, instr); // always use double temp type
+                return try c.emitAssignment(.d, instr); // always use double temp type
             },
             .Float => |f| {
                 // Always use double data type for instruction and return type
                 // This doesn't need to change for NaN boxing because its a valid double
                 const instr = try std.fmt.allocPrint(c.alloc, "copy d_{d}", .{f});
                 defer c.alloc.free(instr);
-                return try c.addInstruction(.function, .d, instr);
+                return try c.emitAssignment(.d, instr);
             },
         }
     }
@@ -1463,11 +1462,7 @@ pub const StringLiteral = struct {
         const str_name = try c.data.addString(self.value);
         const instr = try std.fmt.allocPrint(c.alloc, "copy {s}", .{str_name});
         defer c.alloc.free(instr);
-        return c.addInstruction(
-            .function,
-            .l,
-            instr,
-        );
+        return c.emitAssignment(.l, instr);
     }
 };
 
@@ -1508,7 +1503,7 @@ pub const BooleanLiteral = struct {
         const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{b});
         defer c.alloc.free(instr);
 
-        return try c.addInstruction(.function, .d, instr);
+        return try c.emitAssignment(.d, instr);
     }
 };
 
@@ -1538,7 +1533,7 @@ pub const Nil = struct {
         const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{b});
         defer c.alloc.free(instr);
 
-        return try c.addInstruction(.function, .d, instr);
+        return try c.emitAssignment(.d, instr);
     }
 };
 

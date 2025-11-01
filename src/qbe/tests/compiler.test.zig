@@ -70,11 +70,10 @@ test "add instruction helper" {
     var compiler = try QBECompiler.init(alloc);
     defer compiler.deinit();
 
-    const temp = try compiler.addInstruction(.function, .w, "call $puts(w %str_0)");
+    const temp = try compiler.emitAssignment(.w, "call $puts(w %str_0)");
     try compiler.emit(&writer.writer);
 
     try std.testing.expect(std.mem.indexOf(u8, writer.written(), "%var0 =w call $puts(w %str_0)") != null);
-    try std.testing.expectEqual(temp.sigil, .function);
     try std.testing.expectEqualStrings(temp.name, "var0");
 }
 

@@ -31,12 +31,12 @@ pub const BoxedValue = union(BoxedValueType) {
                 // Cast the d into w to drop bits and get the right type
                 const cast_instr = try allocPrint(c.alloc, "cast %{s}", .{boxed.name});
                 defer c.alloc.free(cast_instr);
-                const cast_result_temp = try c.addInstruction(.function, .l, cast_instr);
+                const cast_result_temp = try c.emitAssignment(.l, cast_instr);
 
                 // Mask all but last bit and return result
                 const mask_instr = try allocPrint(c.alloc, "and %{s}, {d}", .{ cast_result_temp.name, mask });
                 defer c.alloc.free(mask_instr);
-                const masked_temp = try c.addInstruction(.function, .l, mask_instr);
+                const masked_temp = try c.emitAssignment(.l, mask_instr);
 
                 return masked_temp;
             },
@@ -48,14 +48,14 @@ pub const BoxedValue = union(BoxedValueType) {
 
     pub fn getTruthinessValue(comptime t: BoxedValueType, c: *Compiler) !*Temporary {
         if (t == .bool) {
-            _ = try c.symbol_table.createTemporary(.function, .l);
+            _ = try c.symbol_table.createTemporary(.l);
         }
-        return try c.symbol_table.createTemporary(.function, .d);
+        return try c.symbol_table.createTemporary(.d);
     }
 
     pub fn toCValue(t: *Temporary, c: *Compiler) !*Temporary {
         _ = t;
-        return try c.symbol_table.createTemporary(.function, .d);
+        return try c.symbol_table.createTemporary(.d);
     }
 
     /// Turns an i32 into a nan boxed u64

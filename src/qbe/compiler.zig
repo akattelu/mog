@@ -8,7 +8,6 @@ const Writer = std.Io.Writer;
 const FunctionSection = function.FunctionSection;
 const SymbolTable = symbol_table.SymbolTable;
 const Temporary = symbol_table.Temporary;
-const Sigil = symbol_table.Sigil;
 
 /// QBECompiler updates and emits a stored state for a QBE program
 pub const QBECompiler = struct {
@@ -71,12 +70,9 @@ pub const QBECompiler = struct {
     }
 
     /// Add a structured instruction to the current function current block state
-    pub fn addInstruction(self: *QBECompiler, sigil: Sigil, datatype: function.Type, rhs: []const u8) !*Temporary {
-        const temp = try self.symbol_table.createTemporary(sigil, datatype);
-        const instr = try std.fmt.allocPrint(self.alloc, "{s}{s} ={s} {s}", .{ switch (temp.sigil) {
-            .function => "%",
-            .global => "$",
-        }, temp.name, @tagName(datatype), rhs });
+    pub fn emitAssignment(self: *QBECompiler, datatype: function.Type, rhs: []const u8) !*Temporary {
+        const temp = try self.symbol_table.createTemporary(datatype);
+        const instr = try std.fmt.allocPrint(self.alloc, "%{s} ={s} {s}", .{ temp.name, @tagName(datatype), rhs });
         defer self.alloc.free(instr);
         _ = try self.current_function.current_block.?.addInstruction(instr);
 
@@ -85,7 +81,7 @@ pub const QBECompiler = struct {
     }
 
     /// Add string instruction without creating a temporary or assignment
-    pub fn addInstructionWithoutLHS(self: *QBECompiler, rhs: []const u8) !void {
+    pub fn emitString(self: *QBECompiler, rhs: []const u8) !void {
         _ = try self.current_function.current_block.?.addInstruction(rhs);
     }
 
@@ -94,11 +90,11 @@ pub const QBECompiler = struct {
         const s = try self.data.addString(fmt);
         const s_copy_instr = try std.fmt.allocPrint(self.alloc, "copy {s}", .{s});
         defer self.alloc.free(s_copy_instr);
-        const s_local = try self.addInstruction(.function, .l, s_copy_instr);
+        const s_local = try self.emitAssignment(.l, s_copy_instr);
 
         const rhs = try std.fmt.allocPrint(self.alloc, "call $printf(l %{s}, ..., {s} %{s})", .{ s_local.name, @tagName(temp.datatype), temp.name });
         defer self.alloc.free(rhs);
-        _ = try self.addInstruction(.function, .w, rhs);
+        _ = try self.emitAssignment(.w, rhs);
     }
 
     /// Store current block and set current_block ptr

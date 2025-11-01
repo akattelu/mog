@@ -2,8 +2,6 @@ const std = @import("std");
 const Allocator = std.mem.Allocator;
 const Type = @import("function.zig").Type;
 
-pub const Sigil = enum { function, global };
-
 /// Manages scopes and holds associations between variables and SSA temporaries
 pub const SymbolTable = struct {
     scopes: std.ArrayList(*Scope),
@@ -65,14 +63,14 @@ pub const SymbolTable = struct {
     }
 
     /// Define a new variable in the latest scope
-    pub fn define(self: *SymbolTable, name: []const u8, sigil: Sigil, datatype: Type) !*Temporary {
+    pub fn define(self: *SymbolTable, name: []const u8, datatype: Type) !*Temporary {
         const last_scope = self.scopes.getLast();
 
         // Copy name
         const name_copy = try self.alloc.dupe(u8, name); // Make owned copy
 
         // Create temp and add to map
-        const ssa_temporary = try self.createTemporary(sigil, datatype);
+        const ssa_temporary = try self.createTemporary(datatype);
         try last_scope.put(name_copy, ssa_temporary);
 
         // Return the name in case it needs to be used
@@ -96,9 +94,9 @@ pub const SymbolTable = struct {
 
     /// Create a new temporary and increment internal counter for temp names
     /// Allocates using stored allocator
-    pub fn createTemporary(self: *SymbolTable, sigil: Sigil, datatype: Type) !*Temporary {
+    pub fn createTemporary(self: *SymbolTable, datatype: Type) !*Temporary {
         const temp = try self.alloc.create(Temporary);
-        temp.* = .{ .name = try std.fmt.allocPrint(self.alloc, "var{d}", .{self.next_var_id}), .sigil = sigil, .datatype = datatype };
+        temp.* = .{ .name = try std.fmt.allocPrint(self.alloc, "var{d}", .{self.next_var_id}), .datatype = datatype };
         try self.temporaries.append(self.alloc, temp);
 
         // Increment variable number
@@ -116,25 +114,18 @@ pub const SymbolTable = struct {
     }
 };
 
-/// Holds a tuple of sigil (func/global) and temp name
+/// Holds a temporary variable name and datatype
 pub const Temporary = struct {
-    sigil: Sigil,
     name: []const u8,
     datatype: Type,
 
-    /// Print with allocator
+    /// Print with allocator, result needs to be freed
     pub fn print(self: *Temporary, alloc: Allocator) ![]const u8 {
-        return std.fmt.allocPrint(alloc, "{s}{s}", .{ switch (self.sigil) {
-            .function => "%",
-            .global => "$",
-        }, self.name });
+        return std.fmt.allocPrint(alloc, "%{s}", .{self.name});
     }
 
     /// Write with writer
     pub fn write(self: *Temporary, writer: *std.Io.Writer) !void {
-        try writer.print("{s}{s}", .{ switch (self.sigil) {
-            .function => "%",
-            .global => "$",
-        }, self.name });
+        try writer.print("%{s}", .{self.name});
     }
 };
