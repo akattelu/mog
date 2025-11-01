@@ -10,6 +10,7 @@ const Type = @import("qbe/function.zig").Type;
 const Writer = std.Io.Writer;
 pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || error{Invalid};
 const testing = std.testing;
+const boxed = @import("qbe/boxed_value.zig");
 
 /// The different types of statements in the AST.
 pub const StatementTypes = enum { Assignment, Return, Expression, FunctionDeclaration, Do, While, Repeat, ForNumeric, ForGeneric, Break };
@@ -183,7 +184,7 @@ pub const AssignmentStatement = struct {
                 // Symbol has been defined before, so we know that there is a temporary that is defined
                 // in this scope or a parent
                 // Write the store instruction
-                const store_instr = try std.fmt.allocPrint(c.alloc, "storel %{s}, %{s}", .{ rhs_temp.name, existing_temp.name });
+                const store_instr = try std.fmt.allocPrint(c.alloc, "stored %{s}, %{s}", .{ rhs_temp.name, existing_temp.name });
                 defer c.alloc.free(store_instr);
                 try c.addInstructionWithoutLHS(store_instr);
             } else {
@@ -198,7 +199,7 @@ pub const AssignmentStatement = struct {
                 // LHS temp is now associated with a temporary that points to the address where name.value is stored
 
                 // Write the store instruction
-                const store_instr = try std.fmt.allocPrint(c.alloc, "storel %{s}, %{s}", .{ rhs_temp.name, lhs_temp.name });
+                const store_instr = try std.fmt.allocPrint(c.alloc, "stored %{s}, %{s}", .{ rhs_temp.name, lhs_temp.name });
                 defer c.alloc.free(store_instr);
                 try c.addInstructionWithoutLHS(store_instr);
             }
@@ -822,9 +823,9 @@ pub const Identifier = struct {
     // Compile identifier by lookup in symtab
     pub fn compile(self: *const Identifier, c: *Compiler) !*Temporary {
         const ptr = c.symbol_table.lookup(self.value) orelse return CompileError.Invalid;
-        const instr = try std.fmt.allocPrint(c.alloc, "loadl %{s}", .{ptr.name});
+        const instr = try std.fmt.allocPrint(c.alloc, "loadd %{s}", .{ptr.name});
         defer c.alloc.free(instr);
-        return try c.addInstruction(.function, .l, instr);
+        return try c.addInstruction(.function, .d, instr);
     }
 };
 
@@ -1414,12 +1415,12 @@ pub const NumberLiteral = struct {
         switch (self.value) {
             .Integer => |i| {
                 // Convert the literal into nan value
-
+                const nanboxed = boxed.BoxedValue.fromInt(i);
                 // Nan box the literal in the IR
-                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{i}); // always use double
+                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{nanboxed}); // always use double
                 defer c.alloc.free(instr);
                 // Use long data type
-                return try c.addInstruction(.function, .l, instr);
+                return try c.addInstruction(.function, .d, instr);
             },
             .Float => |f| {
                 // Always use double data type for instruction and return type

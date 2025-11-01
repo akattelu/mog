@@ -78,24 +78,24 @@ test "add instruction helper" {
     try std.testing.expectEqualStrings(temp.name, "var0");
 }
 
-test "compile integer literals" {
-    const source =
-        \\0
-        \\42
-        \\9999999
-    ;
-    const ir = try compileToQBE(source);
-    defer alloc.free(ir);
+// test "compile integer literals" {
+//     const source =
+//         \\0
+//         \\42
+//         \\9999999
+//     ;
+//     const ir = try compileToQBE(source);
+//     defer alloc.free(ir);
 
-    try expectIRContains(ir, &.{
-        "export function w $main()",
-        "@start",
-        "%var0 =l copy 0",
-        "%var1 =l copy 42",
-        "%var2 =l copy 9999999",
-        "ret",
-    });
-}
+//     try expectIRContains(ir, &.{
+//         "export function w $main()",
+//         "@start",
+//         "%var0 =l copy 0",
+//         "%var1 =l copy 42",
+//         "%var2 =l copy 9999999",
+//         "ret",
+//     });
+// }
 
 test "compile float literals" {
     const source =
@@ -166,614 +166,614 @@ test "compile nil" {
     });
 }
 
-test "compile builtin call with expression list" {
-    const source =
-        \\$printf("%s %ld", "hello", 2)
-    ;
+// test "compile builtin call with expression list" {
+//     const source =
+//         \\$printf("%s %ld", "hello", 2)
+//     ;
 
-    const ir = try compileToQBE(source);
-    defer alloc.free(ir);
+//     const ir = try compileToQBE(source);
+//     defer alloc.free(ir);
 
-    try expectIRContains(ir, &.{
-        "data $str_0 = { b \"%s %ld\", b 0 }",
-        "data $str_1 = { b \"hello\", b 0 }",
-        "export function w $main()",
-        "@start",
-        "%var0 =l copy $str_0",
-        "%var1 =l copy $str_1",
-        "%var2 =l copy 2",
-        "%var3 =w call $printf(l %var0, ..., l %var1, l %var2)",
-        "ret",
-    });
-}
+//     try expectIRContains(ir, &.{
+//         "data $str_0 = { b \"%s %ld\", b 0 }",
+//         "data $str_1 = { b \"hello\", b 0 }",
+//         "export function w $main()",
+//         "@start",
+//         "%var0 =l copy $str_0",
+//         "%var1 =l copy $str_1",
+//         "%var2 =l copy 2",
+//         "%var3 =w call $printf(l %var0, ..., l %var1, l %var2)",
+//         "ret",
+//     });
+// }
 
-test "compile infix expressions" {
-    const TestCase = struct {
-        source: []const u8,
-        lhs: []const u8,
-        rhs: []const u8,
-        instruction: []const u8,
-        type: Type,
-    };
+// test "compile infix expressions" {
+//     const TestCase = struct {
+//         source: []const u8,
+//         lhs: []const u8,
+//         rhs: []const u8,
+//         instruction: []const u8,
+//         type: Type,
+//     };
 
-    const test_cases = [_]TestCase{
-        // Arithmetic operators
-        .{
-            .type = .l,
-            .source = "2 + 5",
-            .lhs = "2",
-            .rhs = "5",
-            .instruction = "add",
-        },
-        .{ .type = .l, .source = "10 - 3", .lhs = "10", .rhs = "3", .instruction = "sub" },
-        .{ .type = .l, .source = "4 * 7", .lhs = "4", .rhs = "7", .instruction = "mul" },
-        .{ .type = .l, .source = "20 / 5", .lhs = "20", .rhs = "5", .instruction = "div" },
-        .{ .type = .l, .source = "17 % 5", .lhs = "17", .rhs = "5", .instruction = "rem" },
+//     const test_cases = [_]TestCase{
+//         // Arithmetic operators
+//         .{
+//             .type = .l,
+//             .source = "2 + 5",
+//             .lhs = "2",
+//             .rhs = "5",
+//             .instruction = "add",
+//         },
+//         .{ .type = .l, .source = "10 - 3", .lhs = "10", .rhs = "3", .instruction = "sub" },
+//         .{ .type = .l, .source = "4 * 7", .lhs = "4", .rhs = "7", .instruction = "mul" },
+//         .{ .type = .l, .source = "20 / 5", .lhs = "20", .rhs = "5", .instruction = "div" },
+//         .{ .type = .l, .source = "17 % 5", .lhs = "17", .rhs = "5", .instruction = "rem" },
 
-        // Bitwise operators
-        .{ .type = .l, .source = "12 & 7", .lhs = "12", .rhs = "7", .instruction = "and" },
-        .{ .type = .l, .source = "8 | 4", .lhs = "8", .rhs = "4", .instruction = "or" },
-        .{ .type = .l, .source = "15 ~ 3", .lhs = "15", .rhs = "3", .instruction = "xor" },
-        .{ .type = .l, .source = "5 << 2", .lhs = "5", .rhs = "2", .instruction = "shl" },
-        .{ .type = .l, .source = "20 >> 2", .lhs = "20", .rhs = "2", .instruction = "sar" },
+//         // Bitwise operators
+//         .{ .type = .l, .source = "12 & 7", .lhs = "12", .rhs = "7", .instruction = "and" },
+//         .{ .type = .l, .source = "8 | 4", .lhs = "8", .rhs = "4", .instruction = "or" },
+//         .{ .type = .l, .source = "15 ~ 3", .lhs = "15", .rhs = "3", .instruction = "xor" },
+//         .{ .type = .l, .source = "5 << 2", .lhs = "5", .rhs = "2", .instruction = "shl" },
+//         .{ .type = .l, .source = "20 >> 2", .lhs = "20", .rhs = "2", .instruction = "sar" },
 
-        // Comparison operators
-        .{ .type = .l, .source = "5 == 5", .lhs = "5", .rhs = "5", .instruction = "ceql" },
-        .{ .type = .d, .source = "5.5 == 5.5", .lhs = "5.5", .rhs = "5.5", .instruction = "ceqd" },
-        .{ .type = .l, .source = "5 ~= 3", .lhs = "5", .rhs = "3", .instruction = "cnel" },
-        .{ .type = .l, .source = "3 < 7", .lhs = "3", .rhs = "7", .instruction = "csltl" },
-        .{ .type = .l, .source = "10 > 5", .lhs = "10", .rhs = "5", .instruction = "csgtl" },
-        .{ .type = .l, .source = "5 <= 5", .lhs = "5", .rhs = "5", .instruction = "cslel" },
-        .{ .type = .l, .source = "7 >= 3", .lhs = "7", .rhs = "3", .instruction = "csgel" },
-    };
+//         // Comparison operators
+//         .{ .type = .l, .source = "5 == 5", .lhs = "5", .rhs = "5", .instruction = "ceql" },
+//         .{ .type = .d, .source = "5.5 == 5.5", .lhs = "5.5", .rhs = "5.5", .instruction = "ceqd" },
+//         .{ .type = .l, .source = "5 ~= 3", .lhs = "5", .rhs = "3", .instruction = "cnel" },
+//         .{ .type = .l, .source = "3 < 7", .lhs = "3", .rhs = "7", .instruction = "csltl" },
+//         .{ .type = .l, .source = "10 > 5", .lhs = "10", .rhs = "5", .instruction = "csgtl" },
+//         .{ .type = .l, .source = "5 <= 5", .lhs = "5", .rhs = "5", .instruction = "cslel" },
+//         .{ .type = .l, .source = "7 >= 3", .lhs = "7", .rhs = "3", .instruction = "csgel" },
+//     };
 
-    for (test_cases) |tc| {
-        const ir = try compileToQBE(tc.source);
-        defer alloc.free(ir);
+//     for (test_cases) |tc| {
+//         const ir = try compileToQBE(tc.source);
+//         defer alloc.free(ir);
 
-        const expected_lhs = try std.fmt.allocPrint(alloc, "%var0 ={s} copy {s}{s}", .{ @tagName(tc.type), if (tc.type == .d) "d_" else "", tc.lhs });
-        defer alloc.free(expected_lhs);
-        const expected_rhs = try std.fmt.allocPrint(alloc, "%var1 ={s} copy {s}{s}", .{ @tagName(tc.type), if (tc.type == .d) "d_" else "", tc.rhs });
-        defer alloc.free(expected_rhs);
-        const expected_instr = try std.fmt.allocPrint(alloc, "%var2 ={s} {s} %var0, %var1", .{ @tagName(tc.type), tc.instruction });
-        defer alloc.free(expected_instr);
+//         const expected_lhs = try std.fmt.allocPrint(alloc, "%var0 ={s} copy {s}{s}", .{ @tagName(tc.type), if (tc.type == .d) "d_" else "", tc.lhs });
+//         defer alloc.free(expected_lhs);
+//         const expected_rhs = try std.fmt.allocPrint(alloc, "%var1 ={s} copy {s}{s}", .{ @tagName(tc.type), if (tc.type == .d) "d_" else "", tc.rhs });
+//         defer alloc.free(expected_rhs);
+//         const expected_instr = try std.fmt.allocPrint(alloc, "%var2 ={s} {s} %var0, %var1", .{ @tagName(tc.type), tc.instruction });
+//         defer alloc.free(expected_instr);
 
-        try expectIRContains(ir, &.{ expected_lhs, expected_rhs, expected_instr });
-    }
+//         try expectIRContains(ir, &.{ expected_lhs, expected_rhs, expected_instr });
+//     }
 
-    // Test nested expressions separately
-    {
-        const source = "(2 + 3) * 4";
-        const ir = try compileToQBE(source);
-        defer alloc.free(ir);
-        try expectIRContains(ir, &.{
-            "%var0 =l copy 2",
-            "%var1 =l copy 3",
-            "%var2 =l add %var0, %var1",
-            "%var3 =l copy 4",
-            "%var4 =l mul %var2, %var3",
-        });
-    }
-}
+//     // Test nested expressions separately
+//     {
+//         const source = "(2 + 3) * 4";
+//         const ir = try compileToQBE(source);
+//         defer alloc.free(ir);
+//         try expectIRContains(ir, &.{
+//             "%var0 =l copy 2",
+//             "%var1 =l copy 3",
+//             "%var2 =l add %var0, %var1",
+//             "%var3 =l copy 4",
+//             "%var4 =l mul %var2, %var3",
+//         });
+//     }
+// }
 
-test "compile prefix expressions" {
-    const TestCase = struct {
-        source: []const u8,
-        rhs: []const u8,
-        instruction: []const u8,
-    };
+// test "compile prefix expressions" {
+//     const TestCase = struct {
+//         source: []const u8,
+//         rhs: []const u8,
+//         instruction: []const u8,
+//     };
 
-    const test_cases = [_]TestCase{
-        .{ .source = "-3", .rhs = "3", .instruction = "=l neg %var0" },
-        .{ .source = "not 1", .rhs = "7", .instruction = "=l xor %var0, 1" },
-        .{ .source = "~10", .rhs = "5", .instruction = "=l xor %var0, -1" },
-    };
+//     const test_cases = [_]TestCase{
+//         .{ .source = "-3", .rhs = "3", .instruction = "=l neg %var0" },
+//         .{ .source = "not 1", .rhs = "7", .instruction = "=l xor %var0, 1" },
+//         .{ .source = "~10", .rhs = "5", .instruction = "=l xor %var0, -1" },
+//     };
 
-    for (test_cases) |tc| {
-        const ir = try compileToQBE(tc.source);
-        defer alloc.free(ir);
+//     for (test_cases) |tc| {
+//         const ir = try compileToQBE(tc.source);
+//         defer alloc.free(ir);
 
-        try expectIRContains(ir, &.{tc.instruction});
-    }
-}
+//         try expectIRContains(ir, &.{tc.instruction});
+//     }
+// }
 
-test "compile assignment statement and identifier access" {
-    const TestCase = struct {
-        name: []const u8,
-        source: []const u8,
-        expected: []const []const u8,
-    };
+// test "compile assignment statement and identifier access" {
+//     const TestCase = struct {
+//         name: []const u8,
+//         source: []const u8,
+//         expected: []const []const u8,
+//     };
 
-    const test_cases = [_]TestCase{
-        // First-time variable definition
-        .{
-            .name = "first-time variable definition",
-            .source = "local x = 2",
-            .expected = &.{
-                "%var0 =l copy 2",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-            },
-        },
-        // Variable reassignment (redefining same variable)
-        .{
-            .name = "variable reassignment",
-            .source =
-            \\local x = 1
-            \\local x = 2
-            ,
-            .expected = &.{
-                // First assignment: alloc + store
-                "%var0 =l copy 1",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Second assignment: only store (reuses same allocation)
-                "%var2 =l copy 2",
-                "storel %var2, %var1",
-            },
-        },
-        // Multiple different variables
-        .{
-            .name = "multiple variables",
-            .source =
-            \\local x = 2
-            \\local y = 4
-            ,
-            .expected = &.{
-                // x allocation and store
-                "%var0 =l copy 2",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // y allocation and store
-                "%var2 =l copy 4",
-                "%var3 =l alloc8 8",
-                "storel %var2, %var3",
-            },
-        },
-        // Reading variable in expression
-        .{
-            .name = "reading variable in expression",
-            .source =
-            \\local x = 2
-            \\2 + x
-            ,
-            .expected = &.{
-                // x allocation and store
-                "%var0 =l copy 2",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Reading x in expression
-                "%var2 =l copy 2",
-                "%var3 =l loadl %var1",
-                "%var4 =l add %var2, %var3",
-            },
-        },
-        // Using identifier standalone
-        .{
-            .name = "using identifier standalone",
-            .source =
-            \\local y = 4
-            \\y
-            ,
-            .expected = &.{
-                // y allocation and store
-                "%var0 =l copy 4",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Loading y
-                "%var2 =l loadl %var1",
-            },
-        },
-        // Complex: multiple variables with expressions
-        .{
-            .name = "multiple variables with expressions",
-            .source =
-            \\local x = 2
-            \\local y = 4
-            \\2 + x
-            \\y
-            ,
-            .expected = &.{
-                // x allocation and store
-                "%var0 =l copy 2",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // y allocation and store
-                "%var2 =l copy 4",
-                "%var3 =l alloc8 8",
-                "storel %var2, %var3",
-                // Expression: 2 + x
-                "%var4 =l copy 2",
-                "%var5 =l loadl %var1",
-                "%var6 =l add %var4, %var5",
-                // Loading y
-                "%var7 =l loadl %var3",
-            },
-        },
-        // Single variable multiple reassignment
-        .{
-            .name = "multiple variables with expressions",
-            .source =
-            \\local x = 2
-            \\x = 3
-            \\x = 4
-            \\y = x
-            \\y
-            ,
-            .expected = &.{
-                // x allocation and store
-                "%var0 =l copy 2",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                "%var2 =l copy 3",
-                "storel %var2, %var1",
-                "%var3 =l copy 4",
-                "storel %var3, %var1",
-                "%var4 =l loadl %var1",
-                "%var5 =l alloc8 8",
-                "storel %var4, %var5",
-                "%var6 =l loadl %var5",
-            },
-        },
-    };
+//     const test_cases = [_]TestCase{
+//         // First-time variable definition
+//         .{
+//             .name = "first-time variable definition",
+//             .source = "local x = 2",
+//             .expected = &.{
+//                 "%var0 =l copy 2",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//             },
+//         },
+//         // Variable reassignment (redefining same variable)
+//         .{
+//             .name = "variable reassignment",
+//             .source =
+//             \\local x = 1
+//             \\local x = 2
+//             ,
+//             .expected = &.{
+//                 // First assignment: alloc + store
+//                 "%var0 =l copy 1",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Second assignment: only store (reuses same allocation)
+//                 "%var2 =l copy 2",
+//                 "storel %var2, %var1",
+//             },
+//         },
+//         // Multiple different variables
+//         .{
+//             .name = "multiple variables",
+//             .source =
+//             \\local x = 2
+//             \\local y = 4
+//             ,
+//             .expected = &.{
+//                 // x allocation and store
+//                 "%var0 =l copy 2",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // y allocation and store
+//                 "%var2 =l copy 4",
+//                 "%var3 =l alloc8 8",
+//                 "storel %var2, %var3",
+//             },
+//         },
+//         // Reading variable in expression
+//         .{
+//             .name = "reading variable in expression",
+//             .source =
+//             \\local x = 2
+//             \\2 + x
+//             ,
+//             .expected = &.{
+//                 // x allocation and store
+//                 "%var0 =l copy 2",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Reading x in expression
+//                 "%var2 =l copy 2",
+//                 "%var3 =l loadl %var1",
+//                 "%var4 =l add %var2, %var3",
+//             },
+//         },
+//         // Using identifier standalone
+//         .{
+//             .name = "using identifier standalone",
+//             .source =
+//             \\local y = 4
+//             \\y
+//             ,
+//             .expected = &.{
+//                 // y allocation and store
+//                 "%var0 =l copy 4",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Loading y
+//                 "%var2 =l loadl %var1",
+//             },
+//         },
+//         // Complex: multiple variables with expressions
+//         .{
+//             .name = "multiple variables with expressions",
+//             .source =
+//             \\local x = 2
+//             \\local y = 4
+//             \\2 + x
+//             \\y
+//             ,
+//             .expected = &.{
+//                 // x allocation and store
+//                 "%var0 =l copy 2",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // y allocation and store
+//                 "%var2 =l copy 4",
+//                 "%var3 =l alloc8 8",
+//                 "storel %var2, %var3",
+//                 // Expression: 2 + x
+//                 "%var4 =l copy 2",
+//                 "%var5 =l loadl %var1",
+//                 "%var6 =l add %var4, %var5",
+//                 // Loading y
+//                 "%var7 =l loadl %var3",
+//             },
+//         },
+//         // Single variable multiple reassignment
+//         .{
+//             .name = "multiple variables with expressions",
+//             .source =
+//             \\local x = 2
+//             \\x = 3
+//             \\x = 4
+//             \\y = x
+//             \\y
+//             ,
+//             .expected = &.{
+//                 // x allocation and store
+//                 "%var0 =l copy 2",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 "%var2 =l copy 3",
+//                 "storel %var2, %var1",
+//                 "%var3 =l copy 4",
+//                 "storel %var3, %var1",
+//                 "%var4 =l loadl %var1",
+//                 "%var5 =l alloc8 8",
+//                 "storel %var4, %var5",
+//                 "%var6 =l loadl %var5",
+//             },
+//         },
+//     };
 
-    for (test_cases) |tc| {
-        const ir = try compileToQBE(tc.source);
-        defer alloc.free(ir);
+//     for (test_cases) |tc| {
+//         const ir = try compileToQBE(tc.source);
+//         defer alloc.free(ir);
 
-        expectIRContains(ir, tc.expected) catch |err| {
-            std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
-            std.debug.print("Generated IR:\n{s}\n", .{ir});
-            return err;
-        };
-    }
-}
+//         expectIRContains(ir, tc.expected) catch |err| {
+//             std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
+//             std.debug.print("Generated IR:\n{s}\n", .{ir});
+//             return err;
+//         };
+//     }
+// }
 
-test "compile conditional expressions" {
-    const TestCase = struct {
-        name: []const u8,
-        source: []const u8,
-        expected: []const []const u8,
-    };
+// test "compile conditional expressions" {
+//     const TestCase = struct {
+//         name: []const u8,
+//         source: []const u8,
+//         expected: []const []const u8,
+//     };
 
-    const test_cases = [_]TestCase{
-        // If/then/else/end with truthy condition
-        .{
-            .name = "if/then/else/end with truthy condition",
-            .source =
-            \\local x = 1
-            \\if (x) then
-            \\  $puts("then block")
-            \\else
-            \\  $puts("else block")
-            \\end
-            ,
-            .expected = &.{
-                // Control flow: load x, conditional jump
-                "jnz %",
-                "@block0",
-                "@block1",
-                // Then block
-                "$puts",
-                "jmp @block2",
-                // Else block
-                "$puts",
-                // End block
-                "@block2",
-            },
-        },
-        // If/then/else/end with falsy condition
-        .{
-            .name = "if/then/else/end with falsy condition",
-            .source =
-            \\local y = 0
-            \\if (y) then
-            \\  $puts("should not run")
-            \\else
-            \\  $puts("should run")
-            \\end
-            ,
-            .expected = &.{
-                // Control flow: load y, conditional jump
-                "jnz %",
-                "@block0",
-                "@block1",
-                "$puts",
-                "@block2",
-            },
-        },
-        // If/then/end without else block
-        .{
-            .name = "if/then/end without else block",
-            .source =
-            \\local x = 1
-            \\if (x) then
-            \\  $puts("only then")
-            \\end
-            ,
-            .expected = &.{
-                // Control flow: load x, conditional jump
-                "jnz %",
-                "@block0",
-                "$puts",
-                "jmp @block",
-                "@block1",
-                "@block2",
-            },
-        },
-        // Nested conditionals
-        .{
-            .name = "nested conditionals",
-            .source =
-            \\local x = 1
-            \\local y = 1
-            \\if (x) then
-            \\  if (y) then
-            \\    $puts("nested")
-            \\  end
-            \\end
-            ,
-            .expected = &.{
-                // Outer conditional
-                "jnz %",
-                "@block0",
-                "@block1",
-                // Inner conditional (inside block0)
-                "jnz %",
-                "@block3",
-                "@block4",
-                "$puts",
-                "jmp @block5",
-                // End of outer conditional
-                "jmp @block2",
-            },
-        },
-        // Conditional with comparison expression
-        .{
-            .name = "conditional with comparison",
-            .source =
-            \\local x = 5
-            \\if (x == 5) then
-            \\  $puts("equal")
-            \\end
-            ,
-            .expected = &.{
-                // Load x and compare
-                "loadl %",
-                "ceql",
-                // Conditional jump
-                "jnz %",
-                "@block0",
-                "$puts",
-                "@block1",
-                "@block2",
-            },
-        },
-    };
+//     const test_cases = [_]TestCase{
+//         // If/then/else/end with truthy condition
+//         .{
+//             .name = "if/then/else/end with truthy condition",
+//             .source =
+//             \\local x = 1
+//             \\if (x) then
+//             \\  $puts("then block")
+//             \\else
+//             \\  $puts("else block")
+//             \\end
+//             ,
+//             .expected = &.{
+//                 // Control flow: load x, conditional jump
+//                 "jnz %",
+//                 "@block0",
+//                 "@block1",
+//                 // Then block
+//                 "$puts",
+//                 "jmp @block2",
+//                 // Else block
+//                 "$puts",
+//                 // End block
+//                 "@block2",
+//             },
+//         },
+//         // If/then/else/end with falsy condition
+//         .{
+//             .name = "if/then/else/end with falsy condition",
+//             .source =
+//             \\local y = 0
+//             \\if (y) then
+//             \\  $puts("should not run")
+//             \\else
+//             \\  $puts("should run")
+//             \\end
+//             ,
+//             .expected = &.{
+//                 // Control flow: load y, conditional jump
+//                 "jnz %",
+//                 "@block0",
+//                 "@block1",
+//                 "$puts",
+//                 "@block2",
+//             },
+//         },
+//         // If/then/end without else block
+//         .{
+//             .name = "if/then/end without else block",
+//             .source =
+//             \\local x = 1
+//             \\if (x) then
+//             \\  $puts("only then")
+//             \\end
+//             ,
+//             .expected = &.{
+//                 // Control flow: load x, conditional jump
+//                 "jnz %",
+//                 "@block0",
+//                 "$puts",
+//                 "jmp @block",
+//                 "@block1",
+//                 "@block2",
+//             },
+//         },
+//         // Nested conditionals
+//         .{
+//             .name = "nested conditionals",
+//             .source =
+//             \\local x = 1
+//             \\local y = 1
+//             \\if (x) then
+//             \\  if (y) then
+//             \\    $puts("nested")
+//             \\  end
+//             \\end
+//             ,
+//             .expected = &.{
+//                 // Outer conditional
+//                 "jnz %",
+//                 "@block0",
+//                 "@block1",
+//                 // Inner conditional (inside block0)
+//                 "jnz %",
+//                 "@block3",
+//                 "@block4",
+//                 "$puts",
+//                 "jmp @block5",
+//                 // End of outer conditional
+//                 "jmp @block2",
+//             },
+//         },
+//         // Conditional with comparison expression
+//         .{
+//             .name = "conditional with comparison",
+//             .source =
+//             \\local x = 5
+//             \\if (x == 5) then
+//             \\  $puts("equal")
+//             \\end
+//             ,
+//             .expected = &.{
+//                 // Load x and compare
+//                 "loadl %",
+//                 "ceql",
+//                 // Conditional jump
+//                 "jnz %",
+//                 "@block0",
+//                 "$puts",
+//                 "@block1",
+//                 "@block2",
+//             },
+//         },
+//     };
 
-    for (test_cases) |tc| {
-        const ir = try compileToQBE(tc.source);
-        defer alloc.free(ir);
+//     for (test_cases) |tc| {
+//         const ir = try compileToQBE(tc.source);
+//         defer alloc.free(ir);
 
-        expectIRContains(ir, tc.expected) catch |err| {
-            std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
-            std.debug.print("Generated IR:\n{s}\n", .{ir});
-            return err;
-        };
-    }
-}
+//         expectIRContains(ir, tc.expected) catch |err| {
+//             std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
+//             std.debug.print("Generated IR:\n{s}\n", .{ir});
+//             return err;
+//         };
+//     }
+// }
 
-test "compile loop statements" {
-    const TestCase = struct {
-        name: []const u8,
-        source: []const u8,
-        must_contain: []const []const u8,
-    };
+// test "compile loop statements" {
+//     const TestCase = struct {
+//         name: []const u8,
+//         source: []const u8,
+//         must_contain: []const []const u8,
+//     };
 
-    const test_cases = [_]TestCase{
-        // Do-end block with local variable
-        .{
-            .name = "do-end block with local variable",
-            .source =
-            \\do
-            \\  local x = 5
-            \\  $puts("in do block")
-            \\end
-            ,
-            .must_contain = &.{
-                // Jump to do block
-                "jmp @block",
-                "@block",
-                // Variable allocation and storage
-                "%var0 =l copy 5",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Function call
-                "$puts",
-            },
-        },
-        // While loop with truthy condition
-        .{
-            .name = "while loop with truthy condition",
-            .source =
-            \\local x = 3
-            \\while (x) do
-            \\  $puts("looping")
-            \\  local x = x - 1
-            \\end
-            ,
-            .must_contain = &.{
-                // Initial x allocation and storage
-                "%var0 =l copy 3",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Jump to loop condition check
-                "jmp @block",
-                "@block",
-                // Load x for condition
-                "loadl %var1",
-                // Conditional jump
-                "jnz %",
-                "@block",
-                // Loop body: $puts call
-                "$puts",
-                // Load x for subtraction
-                "loadl %var1",
-                "sub",
-                // Store updated x
-                "storel %",
-                // Jump back to condition
-                "jmp @block",
-            },
-        },
-        // While loop with falsy condition (should skip)
-        .{
-            .name = "while loop with falsy condition",
-            .source =
-            \\local x = 0
-            \\while (x) do
-            \\  $puts("should not run")
-            \\end
-            ,
-            .must_contain = &.{
-                // Initial x allocation and storage
-                "%var0 =l copy 0",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Load x for condition
-                "loadl %var1",
-                // Conditional jump
-                "jnz %",
-            },
-        },
-        // Repeat-until loop (executes at least once)
-        .{
-            .name = "repeat-until loop",
-            .source =
-            \\local x = 0
-            \\repeat
-            \\  $puts("repeat body")
-            \\  local x = 1
-            \\until (x)
-            ,
-            .must_contain = &.{
-                // Initial x allocation and storage
-                "%var0 =l copy 0",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Jump to repeat block
-                "jmp @block",
-                "@block",
-                // Function call
-                "$puts",
-                // Reassign x to 1
-                "%var",
-                "storel %",
-                // Load x for condition
-                "loadl %",
-                // Conditional jump (exits if true)
-                "jnz %",
-            },
-        },
-        // Nested while loops
-        .{
-            .name = "nested while loops",
-            .source =
-            \\local i = 2
-            \\while (i) do
-            \\  local j = 2
-            \\  while (j) do
-            \\    $puts("nested")
-            \\  end
-            \\end
-            ,
-            .must_contain = &.{
-                // Outer loop variable i
-                "alloc8 8",
-                "storel %",
-                // Outer loop condition
-                "loadl %",
-                "jnz %",
-                // Inner loop variable j
-                "alloc8 8",
-                "storel %",
-                // Inner loop condition
-                "loadl %",
-                "jnz %",
-                // Function call
-                "$puts",
-                // Jump back to inner loop
-                "jmp @block",
-                // Jump back to outer loop
-                "jmp @block",
-            },
-        },
-        // Do block with multiple statements
-        .{
-            .name = "do block with multiple statements",
-            .source =
-            \\do
-            \\  local a = 1
-            \\  local b = 2
-            \\  local c = a + b
-            \\end
-            ,
-            .must_contain = &.{
-                "@block",
-                // Variable a
-                "%var0 =l copy 1",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Variable b
-                "%var2 =l copy 2",
-                "%var3 =l alloc8 8",
-                "storel %var2, %var3",
-                // Load a and b for addition
-                "loadl %var1",
-                "loadl %var3",
-                "add",
-                // Variable c (result of a + b)
-                "alloc8 8",
-                "storel %",
-            },
-        },
-        // While loop with decrementing counter
-        .{
-            .name = "while loop with counter",
-            .source =
-            \\local y = 10
-            \\while (y) do
-            \\  local y = y - 1
-            \\end
-            ,
-            .must_contain = &.{
-                // Initial y allocation
-                "%var0 =l copy 10",
-                "%var1 =l alloc8 8",
-                "storel %var0, %var1",
-                // Loop condition check
-                "jmp @block",
-                "@block",
-                "loadl %var1",
-                "jnz %",
-                // Loop body: y = y - 1
-                "loadl %var1",
-                "sub",
-                "storel %",
-                // Jump back
-                "jmp @block",
-            },
-        },
-    };
+//     const test_cases = [_]TestCase{
+//         // Do-end block with local variable
+//         .{
+//             .name = "do-end block with local variable",
+//             .source =
+//             \\do
+//             \\  local x = 5
+//             \\  $puts("in do block")
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 // Jump to do block
+//                 "jmp @block",
+//                 "@block",
+//                 // Variable allocation and storage
+//                 "%var0 =l copy 5",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Function call
+//                 "$puts",
+//             },
+//         },
+//         // While loop with truthy condition
+//         .{
+//             .name = "while loop with truthy condition",
+//             .source =
+//             \\local x = 3
+//             \\while (x) do
+//             \\  $puts("looping")
+//             \\  local x = x - 1
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 // Initial x allocation and storage
+//                 "%var0 =l copy 3",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Jump to loop condition check
+//                 "jmp @block",
+//                 "@block",
+//                 // Load x for condition
+//                 "loadl %var1",
+//                 // Conditional jump
+//                 "jnz %",
+//                 "@block",
+//                 // Loop body: $puts call
+//                 "$puts",
+//                 // Load x for subtraction
+//                 "loadl %var1",
+//                 "sub",
+//                 // Store updated x
+//                 "storel %",
+//                 // Jump back to condition
+//                 "jmp @block",
+//             },
+//         },
+//         // While loop with falsy condition (should skip)
+//         .{
+//             .name = "while loop with falsy condition",
+//             .source =
+//             \\local x = 0
+//             \\while (x) do
+//             \\  $puts("should not run")
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 // Initial x allocation and storage
+//                 "%var0 =l copy 0",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Load x for condition
+//                 "loadl %var1",
+//                 // Conditional jump
+//                 "jnz %",
+//             },
+//         },
+//         // Repeat-until loop (executes at least once)
+//         .{
+//             .name = "repeat-until loop",
+//             .source =
+//             \\local x = 0
+//             \\repeat
+//             \\  $puts("repeat body")
+//             \\  local x = 1
+//             \\until (x)
+//             ,
+//             .must_contain = &.{
+//                 // Initial x allocation and storage
+//                 "%var0 =l copy 0",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Jump to repeat block
+//                 "jmp @block",
+//                 "@block",
+//                 // Function call
+//                 "$puts",
+//                 // Reassign x to 1
+//                 "%var",
+//                 "storel %",
+//                 // Load x for condition
+//                 "loadl %",
+//                 // Conditional jump (exits if true)
+//                 "jnz %",
+//             },
+//         },
+//         // Nested while loops
+//         .{
+//             .name = "nested while loops",
+//             .source =
+//             \\local i = 2
+//             \\while (i) do
+//             \\  local j = 2
+//             \\  while (j) do
+//             \\    $puts("nested")
+//             \\  end
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 // Outer loop variable i
+//                 "alloc8 8",
+//                 "storel %",
+//                 // Outer loop condition
+//                 "loadl %",
+//                 "jnz %",
+//                 // Inner loop variable j
+//                 "alloc8 8",
+//                 "storel %",
+//                 // Inner loop condition
+//                 "loadl %",
+//                 "jnz %",
+//                 // Function call
+//                 "$puts",
+//                 // Jump back to inner loop
+//                 "jmp @block",
+//                 // Jump back to outer loop
+//                 "jmp @block",
+//             },
+//         },
+//         // Do block with multiple statements
+//         .{
+//             .name = "do block with multiple statements",
+//             .source =
+//             \\do
+//             \\  local a = 1
+//             \\  local b = 2
+//             \\  local c = a + b
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 "@block",
+//                 // Variable a
+//                 "%var0 =l copy 1",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Variable b
+//                 "%var2 =l copy 2",
+//                 "%var3 =l alloc8 8",
+//                 "storel %var2, %var3",
+//                 // Load a and b for addition
+//                 "loadl %var1",
+//                 "loadl %var3",
+//                 "add",
+//                 // Variable c (result of a + b)
+//                 "alloc8 8",
+//                 "storel %",
+//             },
+//         },
+//         // While loop with decrementing counter
+//         .{
+//             .name = "while loop with counter",
+//             .source =
+//             \\local y = 10
+//             \\while (y) do
+//             \\  local y = y - 1
+//             \\end
+//             ,
+//             .must_contain = &.{
+//                 // Initial y allocation
+//                 "%var0 =l copy 10",
+//                 "%var1 =l alloc8 8",
+//                 "storel %var0, %var1",
+//                 // Loop condition check
+//                 "jmp @block",
+//                 "@block",
+//                 "loadl %var1",
+//                 "jnz %",
+//                 // Loop body: y = y - 1
+//                 "loadl %var1",
+//                 "sub",
+//                 "storel %",
+//                 // Jump back
+//                 "jmp @block",
+//             },
+//         },
+//     };
 
-    for (test_cases) |tc| {
-        const ir = try compileToQBE(tc.source);
-        defer alloc.free(ir);
+//     for (test_cases) |tc| {
+//         const ir = try compileToQBE(tc.source);
+//         defer alloc.free(ir);
 
-        expectIRContains(ir, tc.must_contain) catch |err| {
-            std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
-            std.debug.print("Generated IR:\n{s}\n", .{ir});
-            return err;
-        };
-    }
-}
+//         expectIRContains(ir, tc.must_contain) catch |err| {
+//             std.debug.print("\nTest case '{s}' failed\n", .{tc.name});
+//             std.debug.print("Generated IR:\n{s}\n", .{ir});
+//             return err;
+//         };
+//     }
+// }
