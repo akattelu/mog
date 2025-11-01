@@ -33,6 +33,9 @@ zig build run -- parse <file>
 # Format a Lua file with pretty printing
 zig build run -- fmt <file>
 
+# Compile a Lua file to QBE IR
+zig build run -- build <input-file> -o <output-file>
+
 # Show help message
 zig build run -- help
 
@@ -86,9 +89,39 @@ zig build -Drelease=true
    - Used by the `fmt` command to format Lua source files
 
 6. **Main** (`src/main.zig`): CLI entry point with command routing
-   - Command map routes to: `repl`, `parse`, `fmt`, `help`
+   - Command map routes to: `repl`, `parse`, `fmt`, `build`, `help`
    - REPL supports `--lex` mode (tokenization only) and `--parse` mode (full parsing)
    - Uses custom `std.Io.Writer` interface for buffered output
+
+7. **QBE Compiler** (`src/qbe/compiler.zig`): Backend that compiles AST to QBE intermediate representation
+   - Manages data section for global constants, function sections for code, and symbol tables for temporaries
+   - Generates QBE IR instructions from AST nodes via `compile()` methods
+   - Each AST expression/statement type implements a `compile(c: *Compiler)` method that emits QBE IR
+   - Outputs `.ssa` files (QBE IR format) that can be processed by the QBE backend to generate assembly
+   - Symbol table tracks function-local temporaries and global symbols with proper sigils (% for local, $ for global)
+   - Type system includes QBE types: `w` (word/32-bit), `l` (long/64-bit), `d` (double/64-bit float)
+
+### Compilation Pipeline
+
+The mog compiler follows this pipeline:
+
+**Source Code → Lexer → Parser → AST → QBE Compiler → QBE IR (.ssa) → QBE → Assembly (.s) → Native Binary**
+
+- AST nodes implement `compile(*Compiler)` methods that emit QBE IR instructions
+- The QBE Compiler maintains state: data section, function sections, symbol table, current function/block
+- Arithmetic and comparison operators are mapped to QBE instructions (e.g., `+` → `add`, `==` → `ceql`)
+- Control flow is implemented with QBE blocks and jump instructions (`jmp`, `jnz`)
+- The QBE binary (`vendor/qbe/qbe`) processes generated `.ssa` files to produce assembly
+
+### NaN Boxing
+
+**NaN Boxing** (`src/qbe/boxed_value.zig`): Runtime value representation using NaN-tagged pointers
+   - All runtime values are represented as 64-bit doubles with NaN tagging for type discrimination
+   - Base NaN tag: `0xFFF8_0000_0000_0000` with 3-bit type tags stored in bits 48-50
+   - **Value types**: nil (0b000), bool (0b001), int (0b010), double (0b011), string (0b100), table (0b101), function (0b110), builtin (0b111)
+   - Integers are stored in the lower 32 bits, booleans use the least significant bit
+   - Enables efficient type checking, uniform value representation, and seamless interop with double arithmetic
+   - Helper functions: `fromInt(i32) -> u64`, `fromBoolean(bool) -> u64`, `getValueInstruction()` for unboxing
 
 ### Memory Management
 
@@ -200,12 +233,21 @@ The mog compiler uses QBE (Quick Backend) to generate native code with dynamic l
 
 ### Testing
 
-Tests are organized in `src/tests/` directory with separate files for each module:
-- `src/tests/lexer.test.zig`: Token generation, position tracking
-- `src/tests/parser.test.zig`: Statement parsing, expression parsing, operator precedence
-- `src/tests/ast.test.zig`: String representation via `write()` methods
-- `src/tests/token.test.zig`: Token type and keyword mapping tests
-- `src/tests/pretty_printer.test.zig`: Pretty printing functionality
+Tests are organized in `src/tests/` and `src/qbe/tests/` directories with separate files for each module:
+
+**Frontend tests** (`src/tests/`):
+- `lexer.test.zig`: Token generation, position tracking
+- `parser.test.zig`: Statement parsing, expression parsing, operator precedence
+- `ast.test.zig`: String representation via `write()` methods
+- `token.test.zig`: Token type and keyword mapping tests
+- `pretty_printer.test.zig`: Pretty printing functionality
+
+**QBE backend tests** (`src/qbe/tests/`):
+- `compiler.test.zig`: QBE IR generation and instruction emission
+- `boxed_value.test.zig`: NaN boxing and unboxing operations
+- `data.test.zig`: Data section management and string constants
+- `function.test.zig`: Function and block generation
+- `symbol_table.test.zig`: Temporary variable and symbol management
 
 **Important**: To prevent Zig's dead code elimination from removing test files, they are explicitly referenced in `src/main.zig` (lines 219-233) as public declarations in a test block:
 ```zig
@@ -229,8 +271,11 @@ test {
 - The parser uses `expectAndPeek()` pattern for token consumption with error handling
 - Error messages include token position information for debugging via `setErrExpected()` and `setErrExpectedAny()` methods
 - The `Block` type is aliased to `Program` (both are statement collections)
+- All AST expression and statement types must implement three methods: `tokenLiteral()`, `write(Writer)`, `pretty(PrettyPrinter)`, and `compile(*Compiler)`
 - In Zig 0.15+ there are new interfaces for `std.Io.Writer` and `std.Io.Reader` (note the capital `Io` instead of lowercase `io`). Use MCP tools to understand the new interface when revising I/O code.
 - The pre-commit hook (`.githooks/pre-commit`) runs formatting check, build, and tests before allowing commits
+- When adding new QBE instructions, reference the QBE IR documentation at https://c9x.me/compile/doc/il.html
+- NaN boxing is used for runtime values, so compile-time integer literals must be converted using `BoxedValue.fromInt()` or `BoxedValue.fromBoolean()`
 
 ## Zig Documentation
 
