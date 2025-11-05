@@ -120,11 +120,16 @@ pub const Lexer = struct {
         }
     }
 
-    fn readString(self: *Lexer) []const u8 {
+    fn readString(self: *Lexer) ![]const u8 {
         self.readChar();
         const start = self.position;
-        while (self.ch != '\"') {
+        while (self.ch != '\"' and self.ch != 0) {
             self.readChar();
+        }
+
+        // If we hit EOF without closing quote, return error
+        if (self.ch == 0) {
+            return LexError.Illegal;
         }
 
         // include literal and quotes
@@ -314,7 +319,7 @@ pub const Lexer = struct {
             else => {
                 const tok = try self.alloc.allocator().create(Token);
                 if (self.ch == '\"') {
-                    tok.* = .{ .literal = self.readString(), .type = TokenType.string, .start_pos = @intCast(self.position - tok.literal.len), .end_pos = self.position - 1 };
+                    tok.* = .{ .literal = try self.readString(), .type = TokenType.string, .start_pos = @intCast(self.position - tok.literal.len), .end_pos = self.position - 1 };
                     return tok;
                 } else if (self.ch == '$') {
                     tok.literal = try self.readBuiltin();
