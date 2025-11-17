@@ -5,3 +5,5 @@ build/
 *.s
 *.ssa
 test
+
+.DS_Store
