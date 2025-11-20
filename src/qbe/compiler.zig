@@ -16,6 +16,9 @@ pub const QBECompiler = struct {
     functions: *FunctionSection,
     current_function: *function.Function,
     symbol_table: *SymbolTable,
+    error_string: ?[]const u8,
+
+    pub const Error = error{Invalid};
 
     /// Returns an initialized QBECompiler
     pub fn init(alloc: std.mem.Allocator) !QBECompiler {
@@ -38,6 +41,7 @@ pub const QBECompiler = struct {
             .functions = functions,
             .current_function = main,
             .symbol_table = symtab,
+            .error_string = null,
         };
     }
 
@@ -48,6 +52,9 @@ pub const QBECompiler = struct {
         self.alloc.destroy(self.functions);
         self.symbol_table.deinit();
         self.alloc.destroy(self.symbol_table);
+        if (self.error_string) |s| {
+            self.alloc.free(s);
+        }
     }
 
     /// Emit QBE IR to the writer
@@ -100,5 +107,11 @@ pub const QBECompiler = struct {
     /// Store current block and set current_block ptr
     pub fn pushBlock(self: *QBECompiler, block: *function.Block) !void {
         try self.current_function.putBlock(block);
+    }
+
+    /// Update error string and return Invalid
+    pub fn withError(self: *QBECompiler, comptime fmt: []const u8, args: anytype) (std.mem.Allocator.Error || Error) {
+        self.error_string = try std.fmt.allocPrint(self.alloc, fmt, args);
+        return Error.Invalid;
     }
 };

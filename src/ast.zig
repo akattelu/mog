@@ -7,7 +7,7 @@ const symbol_table = @import("qbe/symbol_table.zig");
 const Temporary = symbol_table.Temporary;
 const Type = @import("qbe/function.zig").Type;
 const Writer = std.Io.Writer;
-pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || error{Invalid};
+pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || Compiler.Error;
 const testing = std.testing;
 const boxed = @import("qbe/boxed_value.zig").BoxedValue;
 
@@ -923,21 +923,11 @@ pub const InfixExpression = struct {
         const lhs_temp = try self.left.compile(c);
         const rhs_temp = try self.right.compile(c);
 
-        // Calculate result type
-        var result_type: Type = .l;
-        if (lhs_temp.datatype == .d and rhs_temp.datatype == .d) {
-            // TODO: handle more cases
-            result_type = .d;
-        }
-        if (lhs_temp.datatype != rhs_temp.datatype) {
-            return CompileError.Invalid;
-        }
-
         // Get operator from map
         const operator_instruction = operator_map.get(self.operator);
         const comparison_instruction = comparison_map.get(self.operator);
         if (operator_instruction == null and comparison_instruction == null) {
-            return CompileError.Invalid;
+            return c.withError("Unexpected operator in infix expression: {s}", .{self.operator});
         }
 
         // Compute variable strings and defer free for expressions
@@ -949,14 +939,14 @@ pub const InfixExpression = struct {
         // Format and add instruction
         if (comparison_instruction != null) {
             // handle comparison instruction by appending result type to instr name
-            const result_instr = try std.fmt.allocPrint(c.alloc, "{s}{s} {s}, {s}", .{ comparison_instruction.?, @tagName(result_type), lhs_var_name, rhs_var_name });
+            const result_instr = try std.fmt.allocPrint(c.alloc, "{s}{s} {s}, {s}", .{ comparison_instruction.?, "d", lhs_var_name, rhs_var_name });
             defer c.alloc.free(result_instr);
-            return try c.emitAssignment(result_type, result_instr);
+            return try c.emitAssignment(.d, result_instr);
         } else {
             // must be arithmetic / logical operator
             const result_instr = try std.fmt.allocPrint(c.alloc, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
             defer c.alloc.free(result_instr);
-            return try c.emitAssignment(result_type, result_instr);
+            return try c.emitAssignment(.d, result_instr);
         }
     }
 };
@@ -1256,7 +1246,7 @@ pub const PrefixExpression = struct {
             // TODO implement this for strings and tables
             unreachable;
         } else {
-            return CompileError.Invalid;
+            return c.withError("Unexpected prefix operator: {s}", .{self.operator});
         }
     }
 };
