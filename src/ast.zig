@@ -923,6 +923,10 @@ pub const InfixExpression = struct {
         const lhs_temp = try self.left.compile(c);
         const rhs_temp = try self.right.compile(c);
 
+        // Extract type information
+        _ = try boxed.emitType(c, lhs_temp);
+        _ = try boxed.emitType(c, rhs_temp);
+
         // Get operator from map
         const operator_instruction = operator_map.get(self.operator);
         const comparison_instruction = comparison_map.get(self.operator);
@@ -1316,7 +1320,7 @@ pub const ConditionalExpression = struct {
     pub fn compile(self: *const ConditionalExpression, c: *Compiler) CompileError!*Temporary {
         // Compile condition
         const condition_temp = try self.condition.compile(c);
-        const unboxed_condition_temp = try boxed.getValueInstruction(.bool, c, condition_temp);
+        const unboxed_condition_temp = try boxed.emitValue(.bool, c, condition_temp);
 
         const then_block = try c.functions.createBlock();
         const else_block = try c.functions.createBlock();

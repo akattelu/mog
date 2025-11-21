@@ -23,7 +23,7 @@ pub const BoxedValue = union(BoxedValueType) {
     }
 
     /// Emit instructions that unbox the nan value and return the temporary its stored in
-    pub fn getValueInstruction(comptime t: BoxedValueType, c: *Compiler, boxed: *Temporary) !*Temporary {
+    pub fn emitValue(comptime t: BoxedValueType, c: *Compiler, boxed: *Temporary) !*Temporary {
         return switch (t) {
             .bool => {
                 const mask: u32 = @as(u32, 0b1);
@@ -44,6 +44,23 @@ pub const BoxedValue = union(BoxedValueType) {
                 unreachable;
             },
         };
+    }
+
+    /// Extract the 3 type bits
+    pub fn emitType(c: *Compiler, boxed: *Temporary) !*Temporary {
+        // The type tag is stored in bits 48-50 (3 bits)
+        // We need to shift right by 48 bits to get those bits into the lower position
+        const shift_instr = try allocPrint(c.alloc, "shr %{s}, 48", .{boxed.name});
+        defer c.alloc.free(shift_instr);
+        const shifted_temp = try c.emitAssignment(.l, shift_instr);
+
+        // Mask to keep only the lower 3 bits (0b111 = 7)
+        const mask: u32 = 0b111;
+        const mask_instr = try allocPrint(c.alloc, "and %{s}, {d}", .{ shifted_temp.name, mask });
+        defer c.alloc.free(mask_instr);
+        const masked_temp = try c.emitAssignment(.l, mask_instr);
+
+        return masked_temp;
     }
 
     /// Turns an i32 into a nan boxed u64
