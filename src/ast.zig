@@ -9,7 +9,7 @@ const Type = @import("qbe/function.zig").Type;
 const Writer = std.Io.Writer;
 pub const CompileError = std.mem.Allocator.Error || std.Io.Writer.Error || Compiler.Error;
 const testing = std.testing;
-const boxed = @import("qbe/boxed_value.zig").BoxedValue;
+const boxed = @import("qbe/nan_box.zig").BoxedValue;
 
 /// The different types of statements in the AST.
 pub const StatementTypes = enum { Assignment, Return, Expression, FunctionDeclaration, Do, While, Repeat, ForNumeric, ForGeneric, Break };

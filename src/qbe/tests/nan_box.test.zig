@@ -1,7 +1,7 @@
 const std = @import("std");
 const t = std.testing;
 const alloc = std.testing.allocator;
-const boxed = @import("../boxed_value.zig");
+const boxed = @import("../nan_box.zig");
 const QBECompiler = @import("../compiler.zig").QBECompiler;
 const Temporary = @import("../symbol_table.zig").Temporary;
 
