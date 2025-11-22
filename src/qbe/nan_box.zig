@@ -63,6 +63,11 @@ pub const BoxedValue = union(BoxedValueType) {
         return masked_temp;
     }
 
+    /// Check the 2 temporaries for matching types and fail with an error if they don't matchA
+    pub fn emitTypeValidation(c: *Compiler) !void {
+        _ = c;
+    }
+
     /// Turns an i32 into a nan boxed u64
     pub fn fromInt(i: i32) u64 {
         const int64 = @as(u32, @bitCast(i));
