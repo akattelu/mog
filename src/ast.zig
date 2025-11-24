@@ -185,24 +185,18 @@ pub const AssignmentStatement = struct {
                 // Symbol has been defined before, so we know that there is a temporary that is defined
                 // in this scope or a parent
                 // Write the store instruction
-                const store_instr = try std.fmt.allocPrint(c.alloc, "stored %{s}, %{s}", .{ rhs_temp.name, existing_temp.name });
-                defer c.alloc.free(store_instr);
-                try c.emitString(store_instr);
+                try c.emitString("stored %{s}, %{s}", .{ rhs_temp.name, existing_temp.name });
             } else {
                 // Symbol doesn't exist in this scope
                 // Create a mapping of the symbol to a temporary (should exist in child scopes)
                 // Add an alloc instruction and store the pointer in the temporary
                 // Future calls to lookup will return this temporary which holds the ptr as a long
                 const lhs_temp = try c.symbol_table.define(name.value, .l);
-                const alloc_instr = try std.fmt.allocPrint(c.alloc, "%{s} =l alloc8 8", .{lhs_temp.name});
-                defer c.alloc.free(alloc_instr);
-                try c.emitString(alloc_instr);
+                try c.emitString("%{s} =l alloc8 8", .{lhs_temp.name});
                 // LHS temp is now associated with a temporary that points to the address where name.value is stored
 
                 // Write the store instruction
-                const store_instr = try std.fmt.allocPrint(c.alloc, "stored %{s}, %{s}", .{ rhs_temp.name, lhs_temp.name });
-                defer c.alloc.free(store_instr);
-                try c.emitString(store_instr);
+                try c.emitString("stored %{s}, %{s}", .{ rhs_temp.name, lhs_temp.name });
             }
         }
     }
@@ -350,9 +344,7 @@ pub const DoStatement = struct {
         const do_block = try c.functions.createBlock();
 
         // Jump to do block
-        const jmp_do_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{do_block.label});
-        defer c.alloc.free(jmp_do_str);
-        try c.emitString(jmp_do_str);
+        try c.emitString("jmp @{s}", .{do_block.label});
 
         // Compile do body with new scope
         try c.symbol_table.pushScope();
@@ -364,9 +356,7 @@ pub const DoStatement = struct {
         const continue_block = try c.functions.createBlock();
 
         // Jump to continuation
-        const jmp_continue_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{continue_block.label});
-        defer c.alloc.free(jmp_continue_str);
-        try c.emitString(jmp_continue_str);
+        try c.emitString("jmp @{s}", .{continue_block.label});
 
         // Switch to continuation block
         try c.pushBlock(continue_block);
@@ -426,9 +416,7 @@ pub const WhileStatement = struct {
         const condition_temp = try self.condition.compile(c);
 
         // Branch based on initial condition
-        const jnz_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, body_block.label, exit_block.label });
-        defer c.alloc.free(jnz_str);
-        try c.emitString(jnz_str);
+        try c.emitString("jnz %{s}, @{s}, @{s}", .{ condition_temp.name, body_block.label, exit_block.label });
 
         // Compile body with new scope
         try c.symbol_table.pushScope();
@@ -437,18 +425,14 @@ pub const WhileStatement = struct {
         c.symbol_table.popScope();
 
         // Jump to condition re-check block (for next iteration)
-        const jmp_recheck_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{condition_recheck_block.label});
-        defer c.alloc.free(jmp_recheck_str);
-        try c.emitString(jmp_recheck_str);
+        try c.emitString("jmp @{s}", .{condition_recheck_block.label});
 
         // Condition re-check block (target for backward jump)
         try c.pushBlock(condition_recheck_block);
         const condition_temp_recheck = try self.condition.compile(c);
 
         // Branch based on re-evaluated condition
-        const jnz_recheck_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp_recheck.name, body_block.label, exit_block.label });
-        defer c.alloc.free(jnz_recheck_str);
-        try c.emitString(jnz_recheck_str);
+        try c.emitString("jnz %{s}, @{s}, @{s}", .{ condition_temp_recheck.name, body_block.label, exit_block.label });
 
         // Switch to exit block
         try c.pushBlock(exit_block);
@@ -502,9 +486,7 @@ pub const RepeatStatement = struct {
         const exit_block = try c.functions.createBlock();
 
         // Jump to body (repeat always executes at least once)
-        const jmp_body_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{body_block.label});
-        defer c.alloc.free(jmp_body_str);
-        try c.emitString(jmp_body_str);
+        try c.emitString("jmp @{s}", .{body_block.label});
 
         // Compile body with new scope
         try c.symbol_table.pushScope();
@@ -516,9 +498,7 @@ pub const RepeatStatement = struct {
         c.symbol_table.popScope();
 
         // Branch: if condition is true, exit; otherwise repeat
-        const jnz_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ condition_temp.name, exit_block.label, body_block.label });
-        defer c.alloc.free(jnz_str);
-        try c.emitString(jnz_str);
+        try c.emitString("jnz %{s}, @{s}, @{s}", .{ condition_temp.name, exit_block.label, body_block.label });
 
         // Switch to exit block
         try c.pushBlock(exit_block);
@@ -1214,10 +1194,8 @@ pub const ConditionalExpression = struct {
         const end_block = try c.functions.createBlock();
 
         // Create "then" block jump instruction
-        const jnz_then_str = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ unboxed_condition_temp.name, then_block.label, else_block.label });
-        defer c.alloc.free(jnz_then_str);
         // Add jump instruction at end of then block
-        try c.emitString(jnz_then_str);
+        try c.emitString("jnz %{s}, @{s}, @{s}", .{ unboxed_condition_temp.name, then_block.label, else_block.label });
 
         // Compile then block
         // Push new block so that compile adds statements into it
@@ -1226,11 +1204,8 @@ pub const ConditionalExpression = struct {
         try self.then_block.compileBlockWithoutRet(c);
 
         // Create "end" block jump instruction at the end of "then" block
-        const jump_end_str = try std.fmt.allocPrint(c.alloc, "jmp @{s}", .{end_block.label});
-        defer c.alloc.free(jump_end_str);
-
         // Add jump instruction at end of then block
-        try c.emitString(jump_end_str);
+        try c.emitString("jmp @{s}", .{end_block.label});
         c.symbol_table.popScope();
 
         // Compile else block

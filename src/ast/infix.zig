@@ -94,9 +94,7 @@ pub const InfixExpression = struct {
         const types_equal = try c.emitAssignment(lhs_type.datatype, "ceql %{s}, %{s}", .{ lhs_type.name, rhs_type.name });
 
         // JNZ to post-error block
-        const jnz_instr = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ types_equal.name, post_err_block.label, err_block.label });
-        defer c.alloc.free(jnz_instr);
-        try c.emitString(jnz_instr);
+        try c.emitString("jnz %{s}, @{s}, @{s}", .{ types_equal.name, post_err_block.label, err_block.label });
 
         // Write error
         // Die

@@ -91,8 +91,10 @@ pub const QBECompiler = struct {
     }
 
     /// Add string instruction without creating a temporary or assignment
-    pub fn emitString(self: *QBECompiler, rhs: []const u8) !void {
-        _ = try self.current_function.current_block.?.addInstruction(rhs);
+    pub fn emitString(self: *QBECompiler, comptime fmt: []const u8, args: anytype) !void {
+        const instr = try std.fmt.allocPrint(self.alloc, fmt, args);
+        defer self.alloc.free(instr);
+        _ = try self.current_function.current_block.?.addInstruction(instr);
     }
 
     /// Store current block and set current_block ptr
