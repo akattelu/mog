@@ -4,7 +4,7 @@ const PrettyPrinter = @import("pretty_printer.zig").PrettyPrinter;
 const qbe = @import("qbe/compiler.zig");
 const symbol_table = @import("qbe/symbol_table.zig");
 const Type = @import("qbe/function.zig").Type;
-const boxed = @import("qbe/nan_box.zig").BoxedValue;
+const boxed = @import("qbe/nan_box.zig");
 pub const InfixExpression = @import("ast/infix.zig").InfixExpression;
 
 const Compiler = qbe.QBECompiler;
@@ -824,9 +824,7 @@ pub const Identifier = struct {
     // Compile identifier by lookup in symtab
     pub fn compile(self: *const Identifier, c: *Compiler) !*Temporary {
         const ptr = c.symbol_table.lookup(self.value) orelse return CompileError.Invalid;
-        const instr = try std.fmt.allocPrint(c.alloc, "loadd %{s}", .{ptr.name});
-        defer c.alloc.free(instr);
-        return try c.emitAssignment(.d, instr);
+        return try c.emitAssignment(.d, "loadd %{s}", .{ptr.name});
     }
 };
 
@@ -1006,11 +1004,7 @@ pub const FunctionCallExpression = struct {
                         // Add string literal to data section
                         const string_data_ref = try c.data.addString(s.value);
 
-                        // Add instruction
-                        const call_instr = try std.fmt.allocPrint(c.alloc, "call {s}(l {s})", .{ cbuiltin.name, string_data_ref });
-                        defer c.alloc.free(call_instr);
-
-                        const tmp = try c.emitAssignment(.w, call_instr);
+                        const tmp = try c.emitAssignment(.w, "call {s}(l {s})", .{ cbuiltin.name, string_data_ref });
                         return tmp;
                     },
 
@@ -1035,7 +1029,7 @@ pub const FunctionCallExpression = struct {
                             }
                         }
                         try writer.writer.writeAll(")");
-                        return try c.emitAssignment(.w, writer.written());
+                        return try c.emitAssignment(.w, "{s}", .{writer.written()});
                     },
 
                     else => unreachable,
@@ -1133,17 +1127,11 @@ pub const PrefixExpression = struct {
 
         // Just checking all the cases here since theres only 4 and they all have significantly different behavior
         if (std.mem.eql(u8, "-", self.operator)) {
-            const neg_instr = try std.fmt.allocPrint(c.alloc, "neg {s}", .{expr_var_name});
-            defer c.alloc.free(neg_instr);
-            return try c.emitAssignment(expr_temp.datatype, neg_instr);
+            return try c.emitAssignment(expr_temp.datatype, "neg {s}", .{expr_var_name});
         } else if (std.mem.eql(u8, "not", self.operator)) {
-            const xor_instr = try std.fmt.allocPrint(c.alloc, "xor {s}, 1", .{expr_var_name});
-            defer c.alloc.free(xor_instr);
-            return try c.emitAssignment(expr_temp.datatype, xor_instr);
+            return try c.emitAssignment(expr_temp.datatype, "xor {s}, 1", .{expr_var_name});
         } else if (std.mem.eql(u8, "~", self.operator)) {
-            const not_expr = try std.fmt.allocPrint(c.alloc, "xor {s}, -1", .{expr_var_name});
-            defer c.alloc.free(not_expr);
-            return try c.emitAssignment(expr_temp.datatype, not_expr);
+            return try c.emitAssignment(expr_temp.datatype, "xor {s}, -1", .{expr_var_name});
         }
         if (std.mem.eql(u8, "#", self.operator)) {
             // TODO implement this for strings and tables
@@ -1259,7 +1247,7 @@ pub const ConditionalExpression = struct {
 
         // NOTE: For now since we aren't handling returned values
         // Make a single copy 1 instruction to use as the returned temporary
-        return try c.emitAssignment(.l, "copy 1");
+        return try c.emitAssignment(.l, "copy 1", .{});
     }
 };
 
@@ -1308,20 +1296,15 @@ pub const NumberLiteral = struct {
         switch (self.value) {
             .Integer => |i| {
                 // Convert the literal into nan value
-                const nanboxed = boxed.fromInt(i);
+                const nanboxed = boxed.BoxedValue.fromInt(i);
                 // Nan box the literal in the IR
                 // Not using d_ here because the value is easier to express as a u64
-                const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{nanboxed});
-                defer c.alloc.free(instr);
-
-                return try c.emitAssignment(.d, instr); // always use double temp type
+                return try c.emitAssignment(.d, "copy {d}", .{nanboxed}); // always use double temp type
             },
             .Float => |f| {
                 // Always use double data type for instruction and return type
                 // This doesn't need to change for NaN boxing because its a valid double
-                const instr = try std.fmt.allocPrint(c.alloc, "copy d_{d}", .{f});
-                defer c.alloc.free(instr);
-                return try c.emitAssignment(.d, instr);
+                return try c.emitAssignment(.d, "copy d_{d}", .{f});
             },
         }
     }
@@ -1353,9 +1336,7 @@ pub const StringLiteral = struct {
     /// Compile by adding string to data section and assigning local
     pub fn compile(self: *const StringLiteral, c: *Compiler) !*Temporary {
         const str_name = try c.data.addString(self.value);
-        const instr = try std.fmt.allocPrint(c.alloc, "copy {s}", .{str_name});
-        defer c.alloc.free(instr);
-        return c.emitAssignment(.l, instr);
+        return c.emitAssignment(.l, "copy {s}", .{str_name});
     }
 };
 
@@ -1392,11 +1373,8 @@ pub const BooleanLiteral = struct {
 
     /// Compile 1 for true, 0 for false
     pub fn compile(self: *const BooleanLiteral, c: *Compiler) !*Temporary {
-        const b = boxed.fromBoolean(self.value); // create boxed u64 from boolean
-        const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{b});
-        defer c.alloc.free(instr);
-
-        return try c.emitAssignment(.d, instr);
+        const b = boxed.BoxedValue.fromBoolean(self.value); // create boxed u64 from boolean
+        return try c.emitAssignment(.d, "copy {d}", .{b});
     }
 };
 
@@ -1422,11 +1400,8 @@ pub const Nil = struct {
 
     /// Compile nil expressions as 0 for now
     pub fn compile(_: *const Nil, c: *Compiler) !*Temporary {
-        const b = boxed.nil_value; // create boxed u64 from boolean
-        const instr = try std.fmt.allocPrint(c.alloc, "copy {d}", .{b});
-        defer c.alloc.free(instr);
-
-        return try c.emitAssignment(.d, instr);
+        const b = boxed.BoxedValue.nil_value; // create boxed u64 from boolean
+        return try c.emitAssignment(.d, "copy {d}", .{b});
     }
 };
 

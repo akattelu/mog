@@ -1,11 +1,40 @@
 const std = @import("std");
 const token = @import("../token.zig");
-const boxed = @import("../qbe/nan_box.zig").BoxedValue;
+const boxed = @import("../qbe/nan_box.zig");
 const Expression = @import("../ast.zig").Expression;
 const Compiler = @import("../qbe/compiler.zig").QBECompiler;
 const PrettyPrinter = @import("../pretty_printer.zig").PrettyPrinter;
 const Temporary = @import("../qbe/symbol_table.zig").Temporary;
 const Writer = std.Io.Writer;
+
+const number_operator_map = std.StaticStringMap([]const u8).initComptime(.{
+    // Arithmetic operators
+    .{ "+", "add" },
+    .{ "-", "sub" },
+    .{ "*", "mul" },
+    .{ "/", "div" },
+    .{ "%", "rem" },
+    // Bitwise operators
+    .{ "&", "and" },
+    .{ "|", "or" },
+    .{ "~", "xor" },
+    .{ "<<", "shl" },
+    .{ ">>", "sar" }, // Using arithmetic right shift (sar) for signed integers
+});
+
+const string_operator_map = std.StaticStringMap(void).initComptime(.{
+    .{ "..", "add" }, // TODO: this shouldn't actually add
+});
+
+const comparison_map = std.StaticStringMap([]const u8).initComptime(.{
+    // Comparison operators
+    .{ "==", "ceq" },
+    .{ "~=", "cne" },
+    .{ "<", "cslt" },
+    .{ ">", "csgt" },
+    .{ "<=", "csle" },
+    .{ ">=", "csge" },
+});
 
 /// Represents a binary infix operation with left and right operands.
 /// Example: `x + y`, `a == b`, `5 * 3`
@@ -18,31 +47,6 @@ pub const InfixExpression = struct {
     left: *Expression,
     /// The right-hand operand
     right: *Expression,
-
-    const operator_map = std.StaticStringMap([]const u8).initComptime(.{
-        // Arithmetic operators
-        .{ "+", "add" },
-        .{ "-", "sub" },
-        .{ "*", "mul" },
-        .{ "/", "div" },
-        .{ "%", "rem" },
-        // Bitwise operators
-        .{ "&", "and" },
-        .{ "|", "or" },
-        .{ "~", "xor" },
-        .{ "<<", "shl" },
-        .{ ">>", "sar" }, // Using arithmetic right shift (sar) for signed integers
-    });
-
-    const comparison_map = std.StaticStringMap([]const u8).initComptime(.{
-        // Comparison operators
-        .{ "==", "ceq" },
-        .{ "~=", "cne" },
-        .{ "<", "cslt" },
-        .{ ">", "csgt" },
-        .{ "<=", "csle" },
-        .{ ">=", "csge" },
-    });
 
     /// Returns the literal text of the operator token.
     pub fn tokenLiteral(self: *const InfixExpression) []const u8 {
@@ -79,11 +83,23 @@ pub const InfixExpression = struct {
         const rhs_temp = try self.right.compile(c);
 
         // Extract type information
-        _ = try boxed.emitType(c, lhs_temp);
-        _ = try boxed.emitType(c, rhs_temp);
+        // const lhs_type = try boxed.emitType(c, lhs_temp);
+        // const rhs_type = try boxed.emitType(c, rhs_temp);
+
+        // Compare types
+
+        // JNZ to post-error block
+        // Write error
+        // Die
+
+        // Start block for post-error
+
+        // Complete operation
+
+        // Store back in nan box and put in temporary
 
         // Get operator from map
-        const operator_instruction = operator_map.get(self.operator);
+        const operator_instruction = number_operator_map.get(self.operator);
         const comparison_instruction = comparison_map.get(self.operator);
         if (operator_instruction == null and comparison_instruction == null) {
             return c.withError("Unexpected operator in infix expression: {s}", .{self.operator});
@@ -98,14 +114,10 @@ pub const InfixExpression = struct {
         // Format and add instruction
         if (comparison_instruction != null) {
             // handle comparison instruction by appending result type to instr name
-            const result_instr = try std.fmt.allocPrint(c.alloc, "{s}{s} {s}, {s}", .{ comparison_instruction.?, "d", lhs_var_name, rhs_var_name });
-            defer c.alloc.free(result_instr);
-            return try c.emitAssignment(.d, result_instr);
+            return try c.emitAssignment(.d, "{s}{s} {s}, {s}", .{ comparison_instruction.?, "d", lhs_var_name, rhs_var_name });
         } else {
             // must be arithmetic / logical operator
-            const result_instr = try std.fmt.allocPrint(c.alloc, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
-            defer c.alloc.free(result_instr);
-            return try c.emitAssignment(.d, result_instr);
+            return try c.emitAssignment(.d, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
         }
     }
 };

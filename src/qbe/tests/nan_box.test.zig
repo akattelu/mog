@@ -10,10 +10,10 @@ test "emitType extracts type bits correctly" {
     defer compiler.deinit();
 
     // Create a boxed value temporary - this would contain a NaN-tagged value
-    const boxed_temp = try compiler.emitAssignment(.d, "copy d_0");
+    const boxed_temp = try compiler.emitAssignment(.d, "copy d_0", .{});
 
     // Call emitType to extract the type bits
-    const type_temp = try boxed.BoxedValue.emitType(&compiler, boxed_temp);
+    const type_temp = try boxed.emitType(&compiler, boxed_temp);
 
     // Capture the emitted IR
     var writer = std.Io.Writer.Allocating.init(alloc);
@@ -39,10 +39,10 @@ test "emitValue unboxes boolean correctly" {
     defer compiler.deinit();
 
     // Create a boxed boolean temporary
-    const boxed_bool = try compiler.emitAssignment(.d, "copy d_0");
+    const boxed_bool = try compiler.emitAssignment(.d, "copy d_0", .{});
 
     // Call emitValue to unbox the boolean
-    const unboxed = try boxed.BoxedValue.emitValue(.bool, &compiler, boxed_bool);
+    const unboxed = try boxed.emitValue(.bool, &compiler, boxed_bool);
 
     // Capture the emitted IR
     var writer = std.Io.Writer.Allocating.init(alloc);
@@ -62,4 +62,21 @@ test "emitValue unboxes boolean correctly" {
     try t.expect(std.mem.indexOf(u8, ir, "%var0") != null);
     try t.expect(std.mem.indexOf(u8, ir, "%var1") != null);
     try t.expect(std.mem.indexOf(u8, ir, "%var2") != null);
+}
+
+test "expect number error" {
+    var compiler = try QBECompiler.init(alloc);
+    defer compiler.deinit();
+
+    const t1 = try compiler.emitAssignment(.l, "copy {d}", .{boxed.BoxedValue.fromInt(42)});
+    try boxed.emitExpectNumber(&compiler, t1);
+
+    var writer = std.Io.Writer.Allocating.init(alloc);
+    defer writer.deinit();
+    try compiler.emit(&writer.writer);
+    const ir = writer.written();
+
+    // Expect shift right for type checking
+    try t.expect(std.mem.indexOf(u8, ir, "shr") != null);
+    // try t.expect(std.mem.indexOf(u8, ir, "jnz") != null);
 }

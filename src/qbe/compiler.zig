@@ -77,8 +77,11 @@ pub const QBECompiler = struct {
     }
 
     /// Add a structured instruction to the current function current block state
-    pub fn emitAssignment(self: *QBECompiler, datatype: function.Type, rhs: []const u8) !*Temporary {
+    pub fn emitAssignment(self: *QBECompiler, datatype: function.Type, comptime rhs_fmt: []const u8, args: anytype) !*Temporary {
         const temp = try self.symbol_table.createTemporary(datatype);
+        const rhs = try std.fmt.allocPrint(self.alloc, rhs_fmt, args);
+        defer self.alloc.free(rhs);
+
         const instr = try std.fmt.allocPrint(self.alloc, "%{s} ={s} {s}", .{ temp.name, @tagName(datatype), rhs });
         defer self.alloc.free(instr);
         _ = try self.current_function.current_block.?.addInstruction(instr);
@@ -90,18 +93,6 @@ pub const QBECompiler = struct {
     /// Add string instruction without creating a temporary or assignment
     pub fn emitString(self: *QBECompiler, rhs: []const u8) !void {
         _ = try self.current_function.current_block.?.addInstruction(rhs);
-    }
-
-    /// Call $printf for debugging
-    pub fn addDebugPrint(self: *QBECompiler, temp: *Temporary, fmt: []const u8) !void {
-        const s = try self.data.addString(fmt);
-        const s_copy_instr = try std.fmt.allocPrint(self.alloc, "copy {s}", .{s});
-        defer self.alloc.free(s_copy_instr);
-        const s_local = try self.emitAssignment(.l, s_copy_instr);
-
-        const rhs = try std.fmt.allocPrint(self.alloc, "call $printf(l %{s}, ..., {s} %{s})", .{ s_local.name, @tagName(temp.datatype), temp.name });
-        defer self.alloc.free(rhs);
-        _ = try self.emitAssignment(.w, rhs);
     }
 
     /// Store current block and set current_block ptr
