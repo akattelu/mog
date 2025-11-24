@@ -82,17 +82,31 @@ pub const InfixExpression = struct {
         const lhs_temp = try self.left.compile(c);
         const rhs_temp = try self.right.compile(c);
 
+        const err_block = try c.functions.createBlock();
+        const post_err_block = try c.functions.createBlock();
+
         // Extract type information
-        // const lhs_type = try boxed.emitType(c, lhs_temp);
-        // const rhs_type = try boxed.emitType(c, rhs_temp);
+        const lhs_type = try boxed.emitType(c, lhs_temp);
+        const rhs_type = try boxed.emitType(c, rhs_temp);
 
         // Compare types
+        // NOTE: For now, only operations with the same type are valid
+        const types_equal = try c.emitAssignment(lhs_type.datatype, "ceql %{s}, %{s}", .{ lhs_type.name, rhs_type.name });
 
         // JNZ to post-error block
+        const jnz_instr = try std.fmt.allocPrint(c.alloc, "jnz %{s}, @{s}, @{s}", .{ types_equal.name, post_err_block.label, err_block.label });
+        defer c.alloc.free(jnz_instr);
+        try c.emitString(jnz_instr);
+
         // Write error
         // Die
+        try c.pushBlock(err_block);
+        const err_string = try c.data.addString("Encountered type mismatch error");
+        _ = try c.emitAssignment(.l, "call $puts(l {s})", .{err_string});
+        _ = try c.emitAssignment(.l, "call $exit()", .{});
 
         // Start block for post-error
+        try c.pushBlock(post_err_block);
 
         // Complete operation
 

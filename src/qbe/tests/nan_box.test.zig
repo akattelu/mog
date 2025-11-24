@@ -21,17 +21,12 @@ test "emitType extracts type bits correctly" {
     try compiler.emit(&writer.writer);
     const ir = writer.written();
 
-    // Test case 1: Verify shift right instruction is emitted
+    try t.expect(std.mem.indexOf(u8, ir, "cast") != null);
     try t.expect(std.mem.indexOf(u8, ir, "shr") != null);
     try t.expect(std.mem.indexOf(u8, ir, ", 48") != null);
-
-    // Test case 2: Verify masking with 0b111 (decimal 7)
     try t.expect(std.mem.indexOf(u8, ir, "and") != null);
     try t.expect(std.mem.indexOf(u8, ir, ", 7") != null);
-
-    // Test case 3: Verify the result temporary has the expected name (var2)
-    // var0 = boxed_temp, var1 = shifted_temp, var2 = masked_temp (return value)
-    try t.expectEqualStrings("var2", type_temp.name);
+    try t.expectEqualStrings("var3", type_temp.name);
 }
 
 test "emitValue unboxes boolean correctly" {

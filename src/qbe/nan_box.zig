@@ -5,7 +5,7 @@ const Temporary = @import("symbol_table.zig").Temporary;
 // NOTE: sign bit is technically unused for now but its set to 1
 const NAN_TAG_BASE: u64 = 0xFFF8_0000_0000_0000;
 
-pub const BoxedValueType = enum(u3) { nil, bool, int, double, string, table, function, builtin };
+pub const BoxedValueType = enum(u3) { nil = 0b000, bool = 0b001, int = 0b010, double = 0b011, string = 0b100, table = 0b101, function = 0b110, builtin = 0b111 };
 pub const BoxedValue = union(BoxedValueType) {
     nil,
     bool,
@@ -58,9 +58,10 @@ pub fn emitValue(comptime t: BoxedValueType, c: *Compiler, boxed: *Temporary) !*
 
 /// Extract the 3 type bits
 pub fn emitType(c: *Compiler, boxed: *Temporary) !*Temporary {
+    const l_casted = try c.emitAssignment(.l, "cast %{s}", .{boxed.name});
     // The type tag is stored in bits 48-50 (3 bits)
     // We need to shift right by 48 bits to get those bits into the lower position
-    const shifted_temp = try c.emitAssignment(.l, "shr %{s}, 48", .{boxed.name});
+    const shifted_temp = try c.emitAssignment(.l, "shr %{s}, 48", .{l_casted.name});
 
     // Mask to keep only the lower 3 bits (0b111 = 7)
     const mask: u32 = 0b111;
