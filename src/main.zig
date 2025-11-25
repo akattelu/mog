@@ -60,7 +60,7 @@ pub fn help(args: *std.process.ArgIterator) CommandErrUnion!u8 {
         \\  repl --parse                             Start REPL in parser mode (full parsing)
         \\  parse <file>                             Parse a Lua file and output the AST
         \\  fmt <file>                               Format a Lua file with pretty printing
-        \\  build <input_file> -o <output_file>k     Compile a lua file to an output QBE SSA file
+        \\  build <input_file> -o <output_file>      Compile a lua file to an output QBE SSA file
         \\
         \\EXAMPLES:
         \\  mog help
@@ -250,7 +250,7 @@ pub fn build(args: *std.process.ArgIterator) CommandErrUnion!u8 {
     try program.compile(&compiler);
 
     // Output the final ssa file
-    try compiler.emitFile(output_file.?);
+    try compiler.writeFile(output_file.?);
 
     return 0;
 }

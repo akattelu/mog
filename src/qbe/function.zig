@@ -232,8 +232,8 @@ pub const FunctionSection = struct {
         return main;
     }
 
-    /// Emit IR for the function section
-    pub fn emit(self: *const FunctionSection, writer: *std.Io.Writer) !void {
+    /// Write IR for the function section
+    pub fn write(self: *const FunctionSection, writer: *std.Io.Writer) !void {
         for (self.functions.items, 0..) |func, i| {
             try func.emit(writer);
             // Add newline between functions (but not after the last one)

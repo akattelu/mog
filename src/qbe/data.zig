@@ -61,8 +61,8 @@ pub const Data = struct {
         self.items.append(&data.node);
     }
 
-    /// Emit IR for the data section
-    pub fn emit(self: *Data, writer: *std.Io.Writer) !void {
+    /// Write IR for the data section
+    pub fn write(self: *Data, writer: *std.Io.Writer) !void {
         var node = self.items.first;
         while (node) |def| {
             const a: *DataDefinition = @fieldParentPtr("node", def);

@@ -58,22 +58,22 @@ pub const QBECompiler = struct {
     }
 
     /// Emit QBE IR to the writer
-    pub fn emit(self: *QBECompiler, writer: *Writer) !void {
-        try self.data.emit(writer);
-        try self.functions.emit(writer);
+    pub fn write(self: *QBECompiler, writer: *Writer) !void {
+        try self.data.write(writer);
+        try self.functions.write(writer);
         try writer.flush();
         return;
     }
 
-    /// Emit QBE IR to a file specified by subpath
-    pub fn emitFile(self: *QBECompiler, subpath: []const u8) !void {
+    /// Write QBE IR to a file specified by subpath
+    pub fn writeFile(self: *QBECompiler, subpath: []const u8) !void {
         const file_handle = try std.fs.cwd().createFile(subpath, .{});
         defer file_handle.close();
 
         var file_writer_buffer: [2048]u8 = undefined;
         var writer = file_handle.writer(&file_writer_buffer);
 
-        try self.emit(&writer.interface);
+        try self.write(&writer.interface);
     }
 
     /// Add a structured instruction to the current function current block state
@@ -91,10 +91,14 @@ pub const QBECompiler = struct {
     }
 
     /// Add string instruction without creating a temporary or assignment
-    pub fn emitString(self: *QBECompiler, comptime fmt: []const u8, args: anytype) !void {
+    pub fn emitRaw(self: *QBECompiler, comptime fmt: []const u8, args: anytype) !void {
         const instr = try std.fmt.allocPrint(self.alloc, fmt, args);
         defer self.alloc.free(instr);
         _ = try self.current_function.current_block.?.addInstruction(instr);
+    }
+
+    pub fn emitRuntimePanic(self: *QBECompiler) !void {
+        _ = self;
     }
 
     /// Store current block and set current_block ptr

@@ -28,7 +28,7 @@ fn compileToQBE(source: []const u8) ![]const u8 {
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
 
-    try compiler.emit(&writer.writer);
+    try compiler.write(&writer.writer);
 
     // Return owned copy of the output
     return try alloc.dupe(u8, writer.written());
@@ -71,7 +71,7 @@ test "add instruction helper" {
     defer compiler.deinit();
 
     const temp = try compiler.emitAssignment(.w, "call $puts(w %str_0)", .{});
-    try compiler.emit(&writer.writer);
+    try compiler.write(&writer.writer);
 
     try std.testing.expect(std.mem.indexOf(u8, writer.written(), "%var0 =w call $puts(w %str_0)") != null);
     try std.testing.expectEqualStrings(temp.name, "var0");

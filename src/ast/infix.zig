@@ -94,12 +94,13 @@ pub const InfixExpression = struct {
         const types_equal = try c.emitAssignment(lhs_type.datatype, "ceql %{s}, %{s}", .{ lhs_type.name, rhs_type.name });
 
         // JNZ to post-error block
-        try c.emitString("jnz %{s}, @{s}, @{s}", .{ types_equal.name, post_err_block.label, err_block.label });
+        try c.emitRaw("jnz %{s}, @{s}, @{s}", .{ types_equal.name, post_err_block.label, err_block.label });
 
         // Write error
         // Die
         try c.pushBlock(err_block);
-        const err_string = try c.data.addString("Encountered type mismatch error");
+        try c.emitRuntimePanic();
+        const err_string = try c.data.addString("Encountered type mismatch error\n");
         _ = try c.emitAssignment(.l, "call $puts(l {s})", .{err_string});
         _ = try c.emitAssignment(.l, "call $exit()", .{});
 

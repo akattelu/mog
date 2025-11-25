@@ -18,7 +18,7 @@ test "emitType extracts type bits correctly" {
     // Capture the emitted IR
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
-    try compiler.emit(&writer.writer);
+    try compiler.write(&writer.writer);
     const ir = writer.written();
 
     try t.expect(std.mem.indexOf(u8, ir, "cast") != null);
@@ -42,7 +42,7 @@ test "emitValue unboxes boolean correctly" {
     // Capture the emitted IR
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
-    try compiler.emit(&writer.writer);
+    try compiler.write(&writer.writer);
     const ir = writer.written();
 
     // Test case 1: Verify cast instruction is emitted (d -> l)
@@ -68,7 +68,7 @@ test "expect number error" {
 
     var writer = std.Io.Writer.Allocating.init(alloc);
     defer writer.deinit();
-    try compiler.emit(&writer.writer);
+    try compiler.write(&writer.writer);
     const ir = writer.written();
 
     // Expect shift right for type checking

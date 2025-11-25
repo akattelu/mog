@@ -24,7 +24,7 @@ test "writing full data section" {
         \\
     ;
 
-    try section.emit(&writer.writer);
+    try section.write(&writer.writer);
     section.deinit();
     try std.testing.expectEqualStrings(expected, writer.written());
 }
