@@ -18,8 +18,13 @@ pub const BoxedValue = union(BoxedValueType) {
 
     pub const nil_value = NAN_TAG_BASE; // this works cause tag is 0b000 and theres no value
 
-    inline fn maskFor(t: BoxedValueType) u64 {
+    pub inline fn maskFor(t: BoxedValueType) u64 {
         return @as(u64, @intFromEnum(t)) << 48;
+    }
+
+    pub inline fn emptyBoxOf(t: BoxedValueType) u64 {
+        const typemask = maskFor(t);
+        return @bitCast(NAN_TAG_BASE | typemask);
     }
 
     /// Turns an i32 into a nan boxed u64

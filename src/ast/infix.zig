@@ -82,6 +82,7 @@ pub const InfixExpression = struct {
         const lhs_temp = try self.left.compile(c);
         const rhs_temp = try self.right.compile(c);
 
+        // Create blocks ahead of time for naming
         const err_block = try c.functions.createBlock();
         const post_err_block = try c.functions.createBlock();
 
@@ -96,20 +97,16 @@ pub const InfixExpression = struct {
         // JNZ to post-error block
         try c.emitRaw("jnz %{s}, @{s}, @{s}", .{ types_equal.name, post_err_block.label, err_block.label });
 
-        // Write error
-        // Die
+        // Write error and die
         try c.pushBlock(err_block);
-        try c.emitRuntimePanic();
-        const err_string = try c.data.addString("Encountered type mismatch error\n");
-        _ = try c.emitAssignment(.l, "call $puts(l {s})", .{err_string});
-        _ = try c.emitAssignment(.l, "call $exit()", .{});
+        try c.emitPanic("Encountered type mismatch error");
 
         // Start block for post-error
         try c.pushBlock(post_err_block);
 
-        // Complete operation
-
-        // Store back in nan box and put in temporary
+        // Unbox operands
+        const lhs_unboxed = try c.emitUnboxing(lhs_temp);
+        const rhs_unboxed = try c.emitUnboxing(rhs_temp);
 
         // Get operator from map
         const operator_instruction = number_operator_map.get(self.operator);
@@ -118,19 +115,17 @@ pub const InfixExpression = struct {
             return c.withError("Unexpected operator in infix expression: {s}", .{self.operator});
         }
 
-        // Compute variable strings and defer free for expressions
-        const lhs_var_name = try lhs_temp.print(c.alloc);
-        const rhs_var_name = try rhs_temp.print(c.alloc);
-        defer c.alloc.free(lhs_var_name);
-        defer c.alloc.free(rhs_var_name);
-
         // Format and add instruction
         if (comparison_instruction != null) {
             // handle comparison instruction by appending result type to instr name
-            return try c.emitAssignment(.d, "{s}{s} {s}, {s}", .{ comparison_instruction.?, "d", lhs_var_name, rhs_var_name });
+            const result = try c.emitAssignment(.l, "{s}{s} %{s}, %{s}", .{ comparison_instruction.?, "d", lhs_unboxed.name, rhs_unboxed.name });
+            const boxed_result = c.emitBoxing(.bool, result);
+            return boxed_result;
         } else {
             // must be arithmetic / logical operator
-            return try c.emitAssignment(.d, "{s} {s}, {s}", .{ operator_instruction.?, lhs_var_name, rhs_var_name });
+            const result = try c.emitAssignment(.l, "{s} %{s}, %{s}", .{ operator_instruction.?, lhs_unboxed.name, rhs_unboxed.name });
+            const boxed_result = try c.emitRuntimeBoxing(lhs_temp, result);
+            return boxed_result;
         }
     }
 };

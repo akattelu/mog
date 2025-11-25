@@ -2,6 +2,7 @@ const std = @import("std");
 const data = @import("data.zig");
 const symbol_table = @import("symbol_table.zig");
 const function = @import("function.zig");
+const boxed = @import("nan_box.zig");
 pub const Data = data;
 pub const Function = function;
 const Writer = std.Io.Writer;
@@ -97,8 +98,38 @@ pub const QBECompiler = struct {
         _ = try self.current_function.current_block.?.addInstruction(instr);
     }
 
-    pub fn emitRuntimePanic(self: *QBECompiler) !void {
-        _ = self;
+    /// Prints an error message and exits immediately
+    pub fn emitPanic(self: *QBECompiler, comptime fmt: []const u8) !void {
+        const err_string = try self.data.addString(fmt);
+        _ = try self.emitAssignment(.l, "call $puts(l {s})", .{err_string});
+        _ = try self.emitAssignment(.l, "call $exit()", .{});
+    }
+
+    /// Emit code to unbox the value out of a nan boxed value
+    pub fn emitUnboxing(self: *QBECompiler, temp: *Temporary) !*Temporary {
+        // FIXME: I think this needs to use .d conditionally based on the boxed value
+        const long_casted = try self.emitAssignment(.l, "cast %{s}", .{temp.name});
+        const mask: u64 = 0x0000FFFFFFFFFFFF;
+        const masked = try self.emitAssignment(.l, "and %{s}, {d}", .{ long_casted.name, mask });
+        return masked;
+    }
+
+    pub fn emitBoxing(self: *QBECompiler, comptime box_type: boxed.BoxedValueType, unboxed: *Temporary) !*Temporary {
+        const empty_box = boxed.BoxedValue.emptyBoxOf(box_type);
+        const casted = try self.emitAssignment(.l, "cast %{s}", .{unboxed.name});
+        return try self.emitAssignment(.d, "or %{s}, {d}", .{ casted.name, empty_box });
+    }
+
+    pub fn emitRuntimeBoxing(self: *QBECompiler, basis: *Temporary, unboxed: *Temporary) !*Temporary {
+        // TODO: might be a bug where the .l and .d aren't right and i need to cast to d always
+        // const casted = try self.emitAssignment(.l, "cast %{s}", .{unboxed.name});
+        const mask: u64 = 0xFFFF000000000000;
+        const casted_basis = try self.emitAssignment(.l, "cast %{s}", .{basis.name});
+        const empty_box = try self.emitAssignment(.l, "and %{s}, {d}", .{ casted_basis.name, mask });
+        // const casted_box = try self.emitAssignment(.d, "cast %{s}", .{empty_box.name});
+        const result = try self.emitAssignment(.l, "or %{s}, %{s}", .{ unboxed.name, empty_box.name });
+        const casted_result = try self.emitAssignment(.d, "cast %{s}", .{result.name});
+        return casted_result;
     }
 
     /// Store current block and set current_block ptr
